@@ -1,0 +1,157 @@
+const { RouterGuard } = require('../../../helpers/Guard');
+const { accessLevel } = require('../../../utils/constants');
+const { viewLimit } = require('../../../utils/ratelimit');
+const kindergartenController = require('../controller/kindergarten-controller');
+const { 
+    kindergartenFilterSchema, 
+    kindergartenInfoSchema, 
+    kindergartenGroupFilterSchema, 
+    kindergartenGroupCreateSchema,
+    kindergartenGroupUpdateSchema,
+    kindergartenGroupDeleteSchema,
+    childrenFilterSchema,
+    childrenCreateSchema,
+    childrenUpdateSchema,
+    childrenDeleteSchema,
+    childrenInfoSchema,
+    attendanceFilterSchema,
+    attendanceCreateSchema,
+    attendanceUpdateSchema,
+    attendanceDeleteSchema,
+    attendanceInfoSchema,
+    dailyFoodCostFilterSchema,
+    dailyFoodCostCreateSchema,
+    dailyFoodCostUpdateSchema,
+    dailyFoodCostDeleteSchema,
+    billingFilterSchema,
+    billingInfoSchema,
+    billingCreateSchema,
+    billingUpdateSchema,
+    billingDeleteSchema
+} = require('../schema/kindergarten-schema');
+
+const routes = async (fastify) => {
+    // Роути для основної функціональності садочків
+    fastify.post("/filter", { 
+        schema: kindergartenFilterSchema, 
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW }) 
+    }, kindergartenController.findDebtByFilter);
+    
+    fastify.get("/info/:id", { 
+        schema: kindergartenInfoSchema, 
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW }), 
+        config: viewLimit 
+    }, kindergartenController.getDebtByDebtorId);
+    
+    fastify.get("/generate/:id", { 
+        schema: kindergartenInfoSchema, 
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW }) 
+    }, kindergartenController.generateWordByDebtId);
+    
+    fastify.get("/print/:id", { 
+        schema: kindergartenInfoSchema, 
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW }) 
+    }, kindergartenController.printDebtId);
+
+    // Роути для груп садочків
+    fastify.post("/groups/filter", { 
+        schema: kindergartenGroupFilterSchema 
+    }, kindergartenController.findGroupsByFilter);
+
+    fastify.post("/groups", { 
+        schema: kindergartenGroupCreateSchema 
+    }, kindergartenController.createGroup);
+
+    fastify.put("/groups/:id", { 
+        schema: kindergartenGroupUpdateSchema 
+    }, kindergartenController.updateGroup);
+
+    fastify.delete("/groups/:id", { 
+        schema: kindergartenGroupDeleteSchema 
+    }, kindergartenController.deleteGroup);
+
+    // Роути для дітей садочку
+    fastify.post("/childrenRoster/filter", { 
+        schema: childrenFilterSchema, 
+    }, kindergartenController.findChildrenByFilter);
+
+    fastify.get("/childrenRoster/:id", { 
+        schema: childrenInfoSchema,  
+        config: viewLimit 
+    }, kindergartenController.getChildById);
+
+    fastify.post("/childrenRoster", { 
+        schema: childrenCreateSchema 
+    }, kindergartenController.createChild);
+
+    fastify.put("/childrenRoster/:id", { 
+        schema: childrenUpdateSchema 
+    }, kindergartenController.updateChild);
+
+    fastify.delete("/childrenRoster/:id", { 
+        schema: childrenDeleteSchema 
+    }, kindergartenController.deleteChild);
+
+    // Роути для відвідуваності садочку
+    fastify.post("/attendance/filter", { 
+        schema: attendanceFilterSchema, 
+    }, kindergartenController.findAttendanceByFilter);
+
+    fastify.get("/attendance/:id", { 
+        schema: attendanceInfoSchema,  
+        config: viewLimit 
+    }, kindergartenController.getAttendanceById);
+
+    fastify.post("/attendance", { 
+        schema: attendanceCreateSchema 
+    }, kindergartenController.createAttendance);
+
+    fastify.put("/attendance/:id", { 
+        schema: attendanceUpdateSchema 
+    }, kindergartenController.updateAttendance);
+
+    fastify.delete("/attendance/:id", { 
+        schema: attendanceDeleteSchema 
+    }, kindergartenController.deleteAttendance);
+
+    // Роути для вартості харчування садочку
+    fastify.post("/daily_food_cost/filter", { 
+        schema: dailyFoodCostFilterSchema 
+    }, kindergartenController.findDailyFoodCostByFilter);
+
+    fastify.post("/daily_food_cost", { 
+        schema: dailyFoodCostCreateSchema 
+    }, kindergartenController.createDailyFoodCost);
+
+    fastify.put("/daily_food_cost/:id", { 
+        schema: dailyFoodCostUpdateSchema 
+    }, kindergartenController.updateDailyFoodCost);
+
+    fastify.delete("/daily_food_cost/:id", { 
+        schema: dailyFoodCostDeleteSchema 
+    }, kindergartenController.deleteDailyFoodCost);
+
+        // Роути для батьківської плати садочку
+    fastify.post("/billing/filter", { 
+        schema: billingFilterSchema 
+    }, kindergartenController.findBillingByFilter);
+
+    fastify.get("/billing/:id", { 
+        schema: billingInfoSchema,  
+        config: viewLimit 
+    }, kindergartenController.getBillingById);
+
+    fastify.post("/billing", { 
+        schema: billingCreateSchema 
+    }, kindergartenController.createBilling);
+
+    fastify.put("/billing/:id", { 
+        schema: billingUpdateSchema 
+    }, kindergartenController.updateBilling);
+
+    fastify.delete("/billing/:id", { 
+        schema: billingDeleteSchema 
+    }, kindergartenController.deleteBilling);
+}
+
+module.exports = routes;
