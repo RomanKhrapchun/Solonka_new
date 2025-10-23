@@ -629,6 +629,174 @@ class KindergartenController {
             })
         }
     }
+
+    // ===============================
+    // API ДЛЯ МОБІЛЬНОГО ДОДАТКУ
+    // ===============================
+
+    async getMobileAttendance(request, reply) {
+        try {
+            const timestamp = parseInt(request.params.date);
+            const data = await kindergartenService.getMobileAttendance(timestamp, request);
+            reply.status(200).send(data);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(400).send({ 
+                error: 'Failed to fetch mobile attendance',
+                message: error.message 
+            });
+        }
+    }
+
+    async saveMobileAttendance(request, reply) {
+        try {
+            const result = await kindergartenService.saveMobileAttendance(request);
+            reply.status(200).send({ 
+                success: true,
+                message: 'Відвідуваність збережено успішно',
+                data: result 
+            });
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(400).send({ 
+                error: 'Failed to save mobile attendance',
+                message: error.message 
+            });
+        }
+    }
+
+    // ===============================
+    // КОНТРОЛЕРИ ДЛЯ АДМІНІСТРАТОРІВ САДОЧКА
+    // ===============================
+
+    async findAdminsByFilter(request, reply) {
+        try {
+            const data = await kindergartenService.findAdminsByFilter(request);
+            reply.status(200).send(data);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(400).send({ 
+                error: 'Failed to fetch kindergarten admins',
+                message: error.message 
+            });
+        }
+    }
+
+    async getAdminById(request, reply) {
+        try {
+            const data = await kindergartenService.getAdminById(request);
+            reply.status(200).send(data);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                });
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to fetch admin',
+                message: error.message 
+            });
+        }
+    }
+
+    async createAdmin(request, reply) {
+        try {
+            const result = await kindergartenService.createAdmin(request);
+            reply.status(201).send({ 
+                message: 'Адміністратора створено успішно',
+                data: result 
+            });
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                });
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to create admin',
+                message: error.message 
+            });
+        }
+    }
+
+    async updateAdmin(request, reply) {
+        try {
+            const result = await kindergartenService.updateAdmin(request);
+            reply.status(200).send({ 
+                message: 'Дані адміністратора оновлено успішно',
+                data: result 
+            });
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            
+            if (error.message.includes('вже існує')) {
+                return reply.status(409).send({ 
+                    error: 'Conflict',
+                    message: error.message 
+                });
+            }
+
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                });
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to update admin',
+                message: error.message 
+            });
+        }
+    }
+
+    async deleteAdmin(request, reply) {
+        try {
+            await kindergartenService.deleteAdmin(request);
+            reply.status(200).send({ 
+                message: 'Адміністратора видалено успішно'
+            });
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            
+            if (error.message.includes('не знайдено')) {
+                return reply.status(404).send({ 
+                    error: 'Not Found',
+                    message: error.message 
+                });
+            }
+            
+            reply.status(400).send({ 
+                error: 'Failed to delete admin',
+                message: error.message 
+            });
+        }
+    }
+
+    // ===============================
+    // ПЕРЕВІРКА ЧИ Є ВИХОВАТЕЛЕМ
+    // ===============================
+
+    async verifyEducator(request, reply) {
+        try {
+            const result = await kindergartenService.verifyEducator(request);
+            reply.status(200).send(result);
+        } catch (error) {
+            Logger.error(error.message, { stack: error.stack });
+            reply.status(400).send({ 
+                error: 'Failed to verify educator',
+                message: error.message 
+            });
+        }
+    }
 }
 
 module.exports = new KindergartenController();

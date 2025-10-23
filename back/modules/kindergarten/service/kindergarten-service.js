@@ -393,21 +393,29 @@ class KindergartenService {
         const { 
             page = 1, 
             limit = 16, 
-            sort_by = 'date', 
-            sort_direction = 'desc',
+            sort_by = 'child_name', 
+            sort_direction = 'asc',
             child_name,
             group_name,
-            date_from,
-            date_to,
+            kindergarten_name,
+            date,
             attendance_status,
-            child_id,
             ...whereConditions 
         } = request.body;
 
         const { offset } = paginate(page, limit);
         
+        // Отримуємо поточну дату для України, якщо дата не вказана
+        const getCurrentUkraineDate = () => {
+            const now = new Date();
+            const ukraineTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Kyiv' }));
+            return ukraineTime.toISOString().split('T')[0];
+        };
+        
+        const filterDate = date || getCurrentUkraineDate();
+        
         // Логування пошуку якщо є параметри фільтрації
-        if (child_name || group_name || date_from || date_to || attendance_status || child_id) {
+        if (child_name || group_name || kindergarten_name || attendance_status) {
             await logRepository.createLog({
                 row_pk_id: null,
                 uid: request?.user?.id,
@@ -430,10 +438,9 @@ class KindergartenService {
             sort_direction,
             child_name,
             group_name,
-            date_from,
-            date_to,
+            kindergarten_name,
+            date: filterDate,
             attendance_status,
-            child_id,
             ...whereConditions
         });
 
@@ -941,6 +948,353 @@ class KindergartenService {
         });
 
         return result;
+    }
+
+    // ===============================
+    // API ДЛЯ МОБІЛЬНОГО ДОДАТКУ
+    // ===============================
+
+    async getMobileAttendance(timestamp, request) {
+        // Конвертуємо timestamp в дату
+        const date = new Date(timestamp * 1000).toISOString().split('T')[0];
+        
+        // Отримуємо всі групи з дітьми та їх відвідуваністю на цю дату
+        const groups = await KindergartenRepository.getMobileAttendanceByDate(date);
+        
+        // Логування
+        if (request?.user?.id) {
+            await logRepository.createLog({
+                row_pk_id: null,
+                uid: request.user.id,
+                action: 'VIEW',
+                client_addr: request?.ip,
+                application_name: 'Мобільний додаток - перегляд відвідуваності',
+                action_stamp_tx: new Date(),
+                action_stamp_stm: new Date(),
+                action_stamp_clk: new Date(),
+                schema_name: 'ower',
+                table_name: 'attendance',
+                oid: '16507',
+            });
+        }
+        
+        // Формуємо відповідь у форматі для мобільного додатку
+        const response = {
+            date: timestamp,
+            groups: groups.map(group => ({
+                id: group.group_id,
+                name: group.group_name,
+                group: group.children.map(child => ({
+                    id: child.child_id,
+                    name: child.child_name,
+                    selected: child.attendance_status === 'present'
+                }))
+            }))
+        };
+        
+        return response;
+    }
+    
+    async saveMobileAttendance(request) {
+        const { date, groups } = request.body;
+        
+        // Конвертуємо timestamp в дату
+        const dateString = new Date(date * 1000).toISOString().split('T')[0];
+        
+        const results = [];
+        const errors = [];
+        
+        // Проходимо по всіх групах та дітях
+        for (const group of groups) {
+            for (const child of group.group) {
+                try {
+                    const attendance_status = child.selected ? 'present' : 'absent';
+                    
+                    // Перевіряємо чи існує запис відвідуваності на цю дату для цієї дитини
+                    const existingAttendance = await KindergartenRepository.getAttendanceByDateAndChild(
+                        dateString, 
+                        child.id
+                    );
+                    
+                    if (existingAttendance && existingAttendance.length > 0) {
+                        // Оновлюємо існуючий запис
+                        await KindergartenRepository.updateAttendance(
+                            existingAttendance[0].id,
+                            { attendance_status }
+                        );
+                        results.push({
+                            child_id: child.id,
+                            action: 'updated',
+                            status: attendance_status
+                        });
+                    } else {
+                        // Створюємо новий запис
+                        await KindergartenRepository.createAttendance({
+                            date: dateString,
+                            child_id: child.id,
+                            attendance_status,
+                            notes: null,
+                            created_at: new Date()
+                        });
+                        results.push({
+                            child_id: child.id,
+                            action: 'created',
+                            status: attendance_status
+                        });
+                    }
+                } catch (error) {
+                    errors.push({
+                        child_id: child.id,
+                        error: error.message
+                    });
+                }
+            }
+        }
+        
+        // Логування
+        if (request?.user?.id) {
+            await logRepository.createLog({
+                row_pk_id: null,
+                uid: request.user.id,
+                action: 'UPDATE',
+                client_addr: request?.ip,
+                application_name: 'Мобільний додаток - збереження відвідуваності',
+                action_stamp_tx: new Date(),
+                action_stamp_stm: new Date(),
+                action_stamp_clk: new Date(),
+                schema_name: 'ower',
+                table_name: 'attendance',
+                oid: '16507',
+            });
+        }
+        
+        return {
+            success: results.length,
+            errors: errors.length,
+            details: {
+                results,
+                errors
+            }
+        };
+    }
+
+    // ===============================
+    // МЕТОДИ ДЛЯ АДМІНІСТРАТОРІВ САДОЧКА
+    // ===============================
+
+    async findAdminsByFilter(request) {
+        const { 
+            page = 1, 
+            limit = 16, 
+            sort_by = 'id', 
+            sort_direction = 'desc',
+            phone_number,
+            full_name,
+            kindergarten_name,
+            role,
+            ...whereConditions 
+        } = request.body;
+
+        const { offset } = paginate(page, limit);
+        
+        // Логування пошуку якщо є параметри фільтрації
+        if (phone_number || full_name || kindergarten_name || role) {
+            await logRepository.createLog({
+                row_pk_id: null,
+                uid: request?.user?.id,
+                action: 'SEARCH',
+                client_addr: request?.ip,
+                application_name: 'Пошук адміністраторів садочка',
+                action_stamp_tx: new Date(),
+                action_stamp_stm: new Date(),
+                action_stamp_clk: new Date(),
+                schema_name: 'ower',
+                table_name: 'kindergarten_admins',
+                oid: '16510',
+            });
+        }
+
+        const userData = await KindergartenRepository.findAdminsByFilter({
+            limit,
+            offset,
+            sort_by,
+            sort_direction,
+            phone_number,
+            full_name,
+            kindergarten_name,
+            role,
+            ...whereConditions
+        });
+
+        return paginationData(userData[0], page, limit);
+    }
+
+    async getAdminById(request) {
+        const { id } = request.params;
+        
+        const adminData = await KindergartenRepository.getAdminById(id);
+        if (!adminData || adminData.length === 0) {
+            throw new Error('Адміністратора не знайдено');
+        }
+
+        return adminData[0];
+    }
+
+    async createAdmin(request) {
+        const {
+            phone_number,
+            full_name,
+            kindergarten_name,
+            role = 'educator'
+        } = request.body;
+
+        // Перевіряємо чи не існує адміністратор з таким номером телефону
+        const existingAdmin = await KindergartenRepository.getAdminByPhone(phone_number);
+
+        if (existingAdmin && existingAdmin.length > 0) {
+            throw new Error('Адміністратор з таким номером телефону вже існує');
+        }
+
+        const adminData = {
+            phone_number,
+            full_name,
+            kindergarten_name,
+            role,
+            created_at: new Date()
+        };
+
+        const result = await KindergartenRepository.createAdmin(adminData);
+
+        // Логування створення
+        await logRepository.createLog({
+            row_pk_id: result.insertId || result[0]?.id,
+            uid: request?.user?.id,
+            action: 'INSERT',
+            client_addr: request?.ip,
+            application_name: 'Створення адміністратора садочка',
+            action_stamp_tx: new Date(),
+            action_stamp_stm: new Date(),
+            action_stamp_clk: new Date(),
+            schema_name: 'ower',
+            table_name: 'kindergarten_admins',
+            oid: '16510',
+        });
+
+        return result;
+    }
+
+    async updateAdmin(request) {
+        const { id } = request.params;
+        const updateData = request.body;
+
+        // Перевіряємо чи існує адміністратор
+        const existingAdmin = await KindergartenRepository.getAdminById(id);
+        if (!existingAdmin || existingAdmin.length === 0) {
+            throw new Error('Адміністратора не знайдено');
+        }
+
+        // Якщо змінюється номер телефону, перевіряємо на дублікати
+        if (updateData.phone_number) {
+            const duplicateAdmin = await KindergartenRepository.getAdminByPhone(
+                updateData.phone_number,
+                id
+            );
+
+            if (duplicateAdmin && duplicateAdmin.length > 0) {
+                throw new Error('Адміністратор з таким номером телефону вже існує');
+            }
+        }
+
+        const result = await KindergartenRepository.updateAdmin(id, updateData);
+
+        // Логування оновлення
+        await logRepository.createLog({
+            row_pk_id: id,
+            uid: request?.user?.id,
+            action: 'UPDATE',
+            client_addr: request?.ip,
+            application_name: 'Оновлення адміністратора садочка',
+            action_stamp_tx: new Date(),
+            action_stamp_stm: new Date(),
+            action_stamp_clk: new Date(),
+            schema_name: 'ower',
+            table_name: 'kindergarten_admins',
+            oid: '16510',
+        });
+
+        return result;
+    }
+
+    async deleteAdmin(request) {
+        const { id } = request.params;
+
+        // Перевіряємо чи існує адміністратор
+        const existingAdmin = await KindergartenRepository.getAdminById(id);
+        if (!existingAdmin || existingAdmin.length === 0) {
+            throw new Error('Адміністратора не знайдено');
+        }
+
+        const result = await KindergartenRepository.deleteAdmin(id);
+
+        // Логування видалення
+        await logRepository.createLog({
+            row_pk_id: id,
+            uid: request?.user?.id,
+            action: 'DELETE',
+            client_addr: request?.ip,
+            application_name: 'Видалення адміністратора садочка',
+            action_stamp_tx: new Date(),
+            action_stamp_stm: new Date(),
+            action_stamp_clk: new Date(),
+            schema_name: 'ower',
+            table_name: 'kindergarten_admins',
+            oid: '16510',
+        });
+
+        return result;
+    }
+
+    // ===============================
+    // ПЕРЕВІРКА ЧИ Є ВИХОВАТЕЛЕМ
+    // ===============================
+
+    async verifyEducator(request) {
+        const { phone_number } = request.body;
+
+        if (!phone_number) {
+            throw new Error('Номер телефону обов\'язковий');
+        }
+
+        // Перевіряємо чи існує вихователь з таким номером
+        const educator = await KindergartenRepository.verifyEducator(phone_number);
+
+        // Логування
+        if (request?.user?.id) {
+            await logRepository.createLog({
+                row_pk_id: educator && educator.length > 0 ? educator[0].id : null,
+                uid: request.user.id,
+                action: 'VIEW',
+                client_addr: request?.ip,
+                application_name: 'Перевірка вихователя (мобільний додаток)',
+                action_stamp_tx: new Date(),
+                action_stamp_stm: new Date(),
+                action_stamp_clk: new Date(),
+                schema_name: 'ower',
+                table_name: 'kindergarten_admins',
+                oid: '16510',
+            });
+        }
+
+        // Повертаємо результат перевірки
+        return {
+            isEducator: educator && educator.length > 0,
+            educatorInfo: educator && educator.length > 0 ? {
+                id: educator[0].id,
+                full_name: educator[0].full_name,
+                kindergarten_name: educator[0].kindergarten_name,
+                phone_number: educator[0].phone_number
+            } : null
+        };
     }
 }
 

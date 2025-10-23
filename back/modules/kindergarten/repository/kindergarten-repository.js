@@ -377,87 +377,86 @@ class KindergartenRepository {
         const {
             limit,
             offset,
-            sort_by = 'date',
-            sort_direction = 'desc',
+            sort_by = 'child_name',
+            sort_direction = 'asc',
             child_name,
             group_name,
-            date_from,
-            date_to,
-            attendance_status,
-            child_id
+            kindergarten_name,
+            date,
+            attendance_status
         } = options;
 
         const values = [];
+        let paramIndex = 1;
+        
+        // Якщо дата не вказана, використовуємо поточну дату України
+        const filterDate = date || new Date().toLocaleDateString('uk-UA', { 
+            timeZone: 'Europe/Kyiv',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).split('.').reverse().join('-');
+
         let sql = `
-            select json_agg(rw) as data,
+            SELECT json_agg(rw) as data,
                 max(cnt) as count
-                from (
-                select json_build_object(
-                    'id', a.id,
-                    'date', a.date,
-                    'child_id', a.child_id,
-                    'attendance_status', a.attendance_status,
-                    'notes', a.notes,
-                    'created_at', a.created_at,
+            FROM (
+                SELECT json_build_object(
+                    'child_id', cr.id,
                     'child_name', cr.child_name,
-                    'parent_name', cr.parent_name,
                     'group_name', kg.group_name,
-                    'kindergarten_name', kg.kindergarten_name
+                    'kindergarten_name', kg.kindergarten_name,
+                    'attendance_id', a.id,
+                    'attendance_status', COALESCE(a.attendance_status, 'absent')
                 ) as rw,
                 count(*) over () as cnt
-            from ower.attendance a
-            left join ower.children_roster cr on cr.id = a.child_id
-            left join ower.kindergarten_groups kg on kg.id = cr.group_id
-            where 1=1
+                FROM ower.children_roster cr
+                LEFT JOIN ower.kindergarten_groups kg ON kg.id = cr.group_id
+                LEFT JOIN ower.attendance a ON a.child_id = cr.id AND a.date = $${paramIndex}
+                WHERE 1=1
         `;
+
+        values.push(filterDate);
+        paramIndex++;
 
         // Додаємо фільтри
         if (child_name) {
-            sql += ` AND cr.child_name ILIKE ?`;
+            sql += ` AND cr.child_name ILIKE $${paramIndex}`;
             values.push(`%${child_name}%`);
+            paramIndex++;
         }
 
         if (group_name) {
-            sql += ` AND kg.group_name ILIKE ?`;
+            sql += ` AND kg.group_name ILIKE $${paramIndex}`;
             values.push(`%${group_name}%`);
+            paramIndex++;
         }
 
-        if (date_from) {
-            sql += ` AND a.date >= ?`;
-            values.push(date_from);
-        }
-
-        if (date_to) {
-            sql += ` AND a.date <= ?`;
-            values.push(date_to);
+        if (kindergarten_name) {
+            sql += ` AND kg.kindergarten_name ILIKE $${paramIndex}`;
+            values.push(`%${kindergarten_name}%`);
+            paramIndex++;
         }
 
         if (attendance_status) {
-            sql += ` AND a.attendance_status = ?`;
+            sql += ` AND COALESCE(a.attendance_status, 'absent') = $${paramIndex}`;
             values.push(attendance_status);
-        }
-
-        if (child_id) {
-            sql += ` AND a.child_id = ?`;
-            values.push(child_id);
+            paramIndex++;
         }
 
         // Додаємо сортування
-        const allowedSortFields = ['id', 'date', 'attendance_status', 'created_at'];
-        const validSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'date';
-        const validSortDirection = ['asc', 'desc'].includes(sort_direction.toLowerCase()) ? sort_direction.toUpperCase() : 'DESC';
+        const allowedSortFields = ['child_name', 'group_name'];
+        const validSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'child_name';
+        const validSortDirection = ['asc', 'desc'].includes(sort_direction.toLowerCase()) ? sort_direction.toUpperCase() : 'ASC';
         
-        // Для сортування по імені дитини або групі використовуємо відповідні поля
         if (validSortBy === 'child_name') {
             sql += ` ORDER BY cr.child_name ${validSortDirection}`;
         } else if (validSortBy === 'group_name') {
             sql += ` ORDER BY kg.group_name ${validSortDirection}`;
-        } else {
-            sql += ` ORDER BY a.${validSortBy} ${validSortDirection}`;
         }
         
         // Додаємо пагінацію
-        sql += ` LIMIT ? OFFSET ?`;
+        sql += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
         values.push(limit, offset);
         
         sql += `) q`;
@@ -970,6 +969,198 @@ class KindergartenRepository {
         `;
 
         return await sqlRequest(sql, values);
+    }
+
+    // ===============================
+    // МЕТОД ДЛЯ МОБІЛЬНОГО ДОДАТКУ
+    // ===============================
+
+    async getMobileAttendanceByDate(date) {
+        const sql = `
+            SELECT 
+                kg.id as group_id,
+                kg.group_name,
+                json_agg(
+                    json_build_object(
+                        'child_id', cr.id,
+                        'child_name', cr.child_name,
+                        'attendance_status', COALESCE(a.attendance_status, 'absent')
+                    ) ORDER BY cr.child_name
+                ) as children
+            FROM ower.kindergarten_groups kg
+            LEFT JOIN ower.children_roster cr ON cr.group_id = kg.id
+            LEFT JOIN ower.attendance a ON a.child_id = cr.id AND a.date = $1
+            WHERE cr.id IS NOT NULL
+            GROUP BY kg.id, kg.group_name
+            ORDER BY kg.group_name
+        `;
+        
+        const result = await sqlRequest(sql, [date]);
+        
+        // Парсимо JSON з children
+        return result.map(row => ({
+            ...row,
+            children: row.children || []
+        }));
+    }
+
+    // ===============================
+    // МЕТОДИ ДЛЯ АДМІНІСТРАТОРІВ САДОЧКА
+    // ===============================
+
+    async findAdminsByFilter(options) {
+        const {
+            limit,
+            offset,
+            sort_by = 'id',
+            sort_direction = 'desc',
+            phone_number,
+            full_name,
+            kindergarten_name,
+            role
+        } = options;
+
+        const values = [];
+        let sql = `
+            select json_agg(rw) as data,
+                max(cnt) as count
+                from (
+                select json_build_object(
+                    'id', ka.id,
+                    'phone_number', ka.phone_number,
+                    'full_name', ka.full_name,
+                    'kindergarten_name', ka.kindergarten_name,
+                    'role', ka.role,
+                    'created_at', ka.created_at
+                ) as rw,
+                count(*) over () as cnt
+            from ower.kindergarten_admins ka
+            where 1=1
+        `;
+
+        // Додаємо фільтри
+        if (phone_number) {
+            sql += ` AND ka.phone_number ILIKE ?`;
+            values.push(`%${phone_number}%`);
+        }
+
+        if (full_name) {
+            sql += ` AND ka.full_name ILIKE ?`;
+            values.push(`%${full_name}%`);
+        }
+
+        if (kindergarten_name) {
+            sql += ` AND ka.kindergarten_name ILIKE ?`;
+            values.push(`%${kindergarten_name}%`);
+        }
+
+        if (role) {
+            sql += ` AND ka.role = ?`;
+            values.push(role);
+        }
+
+        // Додаємо сортування
+        const allowedSortFields = ['id', 'phone_number', 'full_name', 'kindergarten_name', 'role', 'created_at'];
+        const validSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'id';
+        const validSortDirection = ['asc', 'desc'].includes(sort_direction.toLowerCase()) ? sort_direction.toLowerCase() : 'desc';
+        
+        sql += ` order by ka.${validSortBy} ${validSortDirection}`;
+        
+        // Додаємо пагінацію
+        sql += ` limit ? offset ? ) q`;
+        values.push(limit, offset);
+
+        return await sqlRequest(sql, values);
+    }
+
+    async getAdminById(id) {
+        const sql = `
+            SELECT id, phone_number, full_name, kindergarten_name, role, created_at, updated_at
+            FROM ower.kindergarten_admins
+            WHERE id = ?
+        `;
+        return await sqlRequest(sql, [id]);
+    }
+
+    async getAdminByPhone(phoneNumber, excludeId = null) {
+        let sql = `
+            SELECT id, phone_number, full_name
+            FROM ower.kindergarten_admins
+            WHERE phone_number = ?
+        `;
+        const values = [phoneNumber];
+
+        if (excludeId) {
+            sql += ` AND id != ?`;
+            values.push(excludeId);
+        }
+
+        return await sqlRequest(sql, values);
+    }
+
+    async createAdmin(adminData) {
+        const {
+            phone_number,
+            full_name,
+            kindergarten_name,
+            role,
+            created_at
+        } = adminData;
+
+        const sql = `
+            INSERT INTO ower.kindergarten_admins
+            (phone_number, full_name, kindergarten_name, role, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            RETURNING id, phone_number, full_name, kindergarten_name, role, created_at
+        `;
+
+        const values = [
+            phone_number,
+            full_name,
+            kindergarten_name,
+            role || 'educator',
+            created_at
+        ];
+
+        return await sqlRequest(sql, values);
+    }
+
+    async updateAdmin(id, adminData) {
+        const fields = Object.keys(adminData).map(field => `${field} = ?`).join(', ');
+        const values = [...Object.values(adminData), id];
+        
+        const sql = `
+            UPDATE ower.kindergarten_admins
+            SET ${fields}, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            RETURNING id, phone_number, full_name, kindergarten_name, role, created_at, updated_at
+        `;
+        
+        return await sqlRequest(sql, values);
+    }
+
+    async deleteAdmin(id) {
+        const sql = `
+            DELETE FROM ower.kindergarten_admins
+            WHERE id = ?
+            RETURNING id
+        `;
+        
+        return await sqlRequest(sql, [id]);
+    }
+
+    // ===============================
+    // ПЕРЕВІРКА ЧИ Є ВИХОВАТЕЛЕМ
+    // ===============================
+
+    async verifyEducator(phoneNumber) {
+        const sql = `
+            SELECT id, phone_number, full_name, kindergarten_name
+            FROM ower.kindergarten_admins
+            WHERE phone_number = ? AND role = 'educator'
+            LIMIT 1
+        `;
+        return await sqlRequest(sql, [phoneNumber]);
     }
 }
 

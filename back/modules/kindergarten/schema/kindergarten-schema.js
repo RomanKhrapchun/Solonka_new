@@ -606,6 +606,192 @@ const billingDeleteSchema = {
     }
 }
 
+const mobileAttendanceGetSchema = {
+    params: {
+        date: {
+            type: 'string',
+            pattern: '^[0-9]{10}$', // timestamp (10 цифр)
+        }
+    }
+};
+
+const mobileAttendanceSaveSchema = {
+    body: {
+        date: {
+            type: 'number',
+            minimum: 1000000000, // мінімальний timestamp
+            maximum: 9999999999, // максимальний timestamp
+        },
+        groups: {
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    id: { 
+                        type: 'number',
+                        minimum: 1
+                    },
+                    name: { 
+                        type: 'string',
+                        optional: true
+                    },
+                    group: {
+                        type: 'array',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                id: { 
+                                    type: 'number',
+                                    minimum: 1
+                                },
+                                name: { 
+                                    type: 'string',
+                                    optional: true
+                                },
+                                selected: { 
+                                    type: 'boolean'
+                                }
+                            },
+                            required: ['id', 'selected']
+                        }
+                    }
+                },
+                required: ['id', 'group']
+            }
+        }
+    }
+};
+
+// ===============================
+// СХЕМИ ДЛЯ АДМІНІСТРАТОРІВ САДОЧКА
+// ===============================
+
+const adminsInfoSchema = {
+    params: {
+        id: {
+            type: 'string',
+            numeric: true,
+        },
+    }
+};
+
+const adminsFilterSchema = {
+    body: {
+        page: {
+            type: 'number',
+            optional: true,
+        },
+        limit: {
+            type: 'number', 
+            optional: true,
+        },
+        sort_by: {
+            type: 'string',
+            optional: true,
+        },
+        sort_direction: {
+            type: 'string',
+            optional: true,
+        },
+        phone_number: {
+            type: 'string',
+            optional: true,
+            min: 1,
+        },
+        full_name: {
+            type: 'string',
+            optional: true,
+            min: 1,
+        },
+        kindergarten_name: {
+            type: 'string',
+            optional: true,
+            min: 1,
+        },
+        role: {
+            type: 'string',
+            optional: true,
+            enum: ['educator', 'admin'],
+        },
+    }
+};
+
+const adminsCreateSchema = {
+    body: {
+        phone_number: {
+            type: 'string',
+            pattern: '^\\+?[0-9\\s\\-\\(\\)]{10,20}$',
+        },
+        full_name: {
+            type: 'string',
+            min: 1,
+            max: 100,
+        },
+        kindergarten_name: {
+            type: 'string',
+            min: 1,
+            max: 100,
+        },
+        role: {
+            type: 'string',
+            enum: ['educator', 'admin'],
+            optional: true,
+        },
+    }
+};
+
+const adminsUpdateSchema = {
+    params: {
+        id: {
+            type: 'string',
+            numeric: true,
+        }
+    },
+    body: {
+        phone_number: {
+            type: 'string',
+            pattern: '^\\+?[0-9\\s\\-\\(\\)]{10,20}$',
+            optional: true,
+        },
+        full_name: {
+            type: 'string',
+            min: 1,
+            max: 100,
+            optional: true,
+        },
+        kindergarten_name: {
+            type: 'string',
+            min: 1,
+            max: 100,
+            optional: true,
+        },
+        role: {
+            type: 'string',
+            enum: ['educator', 'admin'],
+            optional: true,
+        },
+    }
+};
+
+const adminsDeleteSchema = {
+    params: {
+        id: {
+            type: 'string',
+            numeric: true,
+        }
+    }
+};
+
+const verifyEducatorSchema = {
+    body: {
+        phone_number: {
+            type: 'string',
+            pattern: '^\\+?[0-9\\s\\-\\(\\)]{10,20}$',
+        }
+    }
+};
+
+
 module.exports = {
     // Основні схеми садочка
     kindergartenFilterSchema,
@@ -643,4 +829,18 @@ module.exports = {
     billingCreateSchema,
     billingUpdateSchema,
     billingDeleteSchema,
+
+    //Схеми для мобільного додатка
+    mobileAttendanceGetSchema,
+    mobileAttendanceSaveSchema,
+
+    // Схема для перевірки вихователя
+    verifyEducatorSchema,
+
+    // Схеми для адміністраторів
+    adminsInfoSchema,
+    adminsFilterSchema,
+    adminsCreateSchema,
+    adminsUpdateSchema,
+    adminsDeleteSchema,
 }

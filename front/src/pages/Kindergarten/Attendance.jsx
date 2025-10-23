@@ -1,5 +1,6 @@
 import React, {useCallback, useContext, useEffect, useMemo, useRef, useState} from 'react';
 import {useNavigate} from 'react-router-dom'
+import classNames from 'classnames';
 import useFetch from "../../hooks/useFetch";
 import Table from "../../components/common/Table/Table";
 import {generateIcon, iconMap, STATUS} from "../../utils/constants.jsx";
@@ -11,18 +12,13 @@ import {useNotification} from "../../hooks/useNotification";
 import {Context} from "../../main";
 import Dropdown from "../../components/common/Dropdown/Dropdown";
 import SkeletonPage from "../../components/common/Skeleton/SkeletonPage";
-import Modal from "../../components/common/Modal/Modal.jsx";
 import {Transition} from "react-transition-group";
 import Input from "../../components/common/Input/Input";
 import Select from "../../components/common/Select/Select";
-import FilterDropdown from "../../components/common/Dropdown/FilterDropdown";
-import "../../components/common/Dropdown/FilterDropdown.css";
 
 // Іконки
-const addIcon = generateIcon(iconMap.add, null, 'currentColor', 20, 20)
 const checkIcon = generateIcon(iconMap.check, null, 'currentColor', 16, 16)
 const filterIcon = generateIcon(iconMap.filter, null, 'currentColor', 20, 20)
-const searchIcon = generateIcon(iconMap.search, 'input-icon', 'currentColor', 16, 16)
 const dropDownIcon = generateIcon(iconMap.arrowDown, null, 'currentColor', 20, 20)
 const sortUpIcon = generateIcon(iconMap.arrowUp, 'sort-icon', 'currentColor', 14, 14)
 const sortDownIcon = generateIcon(iconMap.arrowDown, 'sort-icon', 'currentColor', 14, 14)
@@ -68,27 +64,44 @@ const clearAttendanceState = () => {
     }
 };
 
+// Опції для статусів відвідуваності
+const ATTENDANCE_STATUS_OPTIONS = [
+    { value: 'present', label: 'Присутній(-я)' },
+    { value: 'absent', label: 'Відсутній(-я)' },
+    { value: 'sick', label: 'Хворий(-а)' },
+    { value: 'vacation', label: 'Відпустка' }
+];
+
 const Attendance = () => {
     const navigate = useNavigate()
     const notification = useNotification()
     const {store} = useContext(Context)
     const nodeRef = useRef(null)
-    const modalNodeRef = useRef(null)
     
     const [stateAttendance, setStateAttendance] = useState(() => {
         const savedState = loadAttendanceState();
         
+        // Отримуємо поточну дату для України (UTC+2/UTC+3)
+        const getCurrentUkraineDate = () => {
+            const now = new Date();
+            const ukraineTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Kyiv' }));
+            return ukraineTime.toISOString().split('T')[0];
+        };
+        
+        const currentDate = getCurrentUkraineDate();
+        
         if (savedState) {
             return {
                 isFilterOpen: savedState.isFilterOpen || false,
-                selectData: savedState.selectData || {},
+                selectData: savedState.selectData || { date: currentDate },
                 confirmLoading: false,
                 itemId: null,
                 sendData: savedState.sendData || {
                     limit: 16,
                     page: 1,
-                    sort_by: 'date',
-                    sort_direction: 'desc',
+                    sort_by: 'child_name',
+                    sort_direction: 'asc',
+                    date: currentDate
                 }
             };
         }
@@ -96,30 +109,18 @@ const Attendance = () => {
         // Початковий стан за замовчуванням
         return {
             isFilterOpen: false,
-            selectData: {},
+            selectData: { date: currentDate },
             confirmLoading: false,
             itemId: null,
             sendData: {
                 limit: 16,
                 page: 1,
-                sort_by: 'date',
-                sort_direction: 'desc',
+                sort_by: 'child_name',
+                sort_direction: 'asc',
+                date: currentDate
             }
         };
     });
-
-    // стан для модального вікна завантаження групи
-    const [loadGroupModalState, setLoadGroupModalState] = useState({
-        isOpen: false,
-        loading: false,
-        formData: {
-            date: new Date().toISOString().split('T')[0],
-            group_id: ''
-        }
-    });
-
-    // стан для груп (для селекту)
-    const [groupsData, setGroupsData] = useState([]);
 
     const isFirstAPI = useRef(true);
     const {error, status, data, retryFetch} = useFetch('api/kindergarten/attendance/filter', {
@@ -141,30 +142,6 @@ const Attendance = () => {
             data: stateAttendance.sendData
         });
     }, [stateAttendance.sendData, retryFetch]);
-
-    // Завантажуємо список груп для селекту
-    useEffect(() => {
-        const fetchGroups = async () => {
-            try {
-                const response = await fetchFunction('api/kindergarten/groups/filter', {
-                    method: 'POST',
-                    data: { limit: 1000 } // Завантажуємо всі групи
-                });
-                
-                if (response?.items) {
-                    const formattedGroups = response.items.map(group => ({
-                        value: group.id,
-                        label: `${group.group_name} (${group.kindergarten_name})`
-                    }));
-                    setGroupsData(formattedGroups);
-                }
-            } catch (error) {
-                console.error('Error fetching groups:', error);
-            }
-        };
-
-        fetchGroups();
-    }, []);
 
     // Збереження стану при зміні
     useEffect(() => {
@@ -204,32 +181,51 @@ const Attendance = () => {
         }));
     }, [stateAttendance.sendData]);
 
-    // Функція для переключення присутності
+    // Функція для перемикання присутності
     const toggleAttendance = async (record) => {
         const newStatus = record.attendance_status === 'present' ? 'absent' : 'present';
         
+        // Отримуємо дату з sendData або selectData
+        const currentDate = stateAttendance.sendData.date || stateAttendance.selectData.date;
+        
+        if (!currentDate) {
+            notification({
+                type: 'error',
+                placement: 'top',
+                title: 'Помилка',
+                message: 'Будь ласка, оберіть дату',
+            });
+            return;
+        }
+        
         try {
-            if (record.id) {
+            if (record.attendance_id) {
                 // Оновлюємо існуючий запис
-                await fetchFunction(`api/kindergarten/attendance/${record.id}`, {
+                await fetchFunction(`api/kindergarten/attendance/${record.attendance_id}`, {
                     method: 'PUT',
                     data: {
                         attendance_status: newStatus
                     }
                 });
             } else {
-                // Створюємо новий запис
+                // Створюємо новий запис відвідуваності для дитини
                 await fetchFunction('api/kindergarten/attendance', {
                     method: 'POST',
                     data: {
-                        date: record.date,
+                        date: currentDate,
                         child_id: record.child_id,
                         attendance_status: newStatus
                     }
                 });
             }
 
-            // Оновлюємо список
+            notification({
+                type: 'success',
+                placement: 'top',
+                title: 'Успіх',
+                message: 'Відвідуваність оновлено успішно',
+            });
+
             retryFetch('api/kindergarten/attendance/filter', {
                 method: 'post',
                 data: stateAttendance.sendData,
@@ -248,21 +244,14 @@ const Attendance = () => {
     const columns = useMemo(() => {
         const columns = [
             {
-                title: (
-                    <div 
-                        className={`sortable-header ${stateAttendance.sendData.sort_by === 'date' ? 'active' : ''}`}
-                        onClick={() => handleSort('date')}
-                    >
-                        <span>Дата</span>
-                        <div className="sort-icon-wrapper">
-                            {getSortIcon('date')}
-                        </div>
-                    </div>
-                ),
-                dataIndex: 'date',
-                key: 'date',
-                sorter: false,
-                render: (date) => new Date(date).toLocaleDateString('uk-UA')
+                title: 'Дата',
+                dataIndex: 'attendance_date',
+                key: 'attendance_date',
+                width: 120,
+                render: (date) => {
+                    const displayDate = stateAttendance.sendData.date || stateAttendance.selectData.date;
+                    return new Date(displayDate).toLocaleDateString('uk-UA');
+                }
             },
             {
                 title: (
@@ -281,33 +270,54 @@ const Attendance = () => {
                 sorter: false,
             },
             {
+                title: (
+                    <div 
+                        className={`sortable-header ${stateAttendance.sendData.sort_by === 'group_name' ? 'active' : ''}`}
+                        onClick={() => handleSort('group_name')}
+                    >
+                        <span>Група</span>
+                        <div className="sort-icon-wrapper">
+                            {getSortIcon('group_name')}
+                        </div>
+                    </div>
+                ),
+                dataIndex: 'group_name',
+                key: 'group_name',
+                sorter: false,
+            },
+            {
+                title: 'Садочок',
+                dataIndex: 'kindergarten_name',
+                key: 'kindergarten_name',
+            },
+            {
                 title: 'Присутність',
                 dataIndex: 'attendance_status',
                 key: 'attendance_status',
-                render: (status) => (
-                    <div style={{ textAlign: 'center' }}>
-                        {status === 'present' ? (
+                render: (status) => {
+                    const statusConfig = {
+                        present: { color: '#52c41a', label: 'Присутній(-я)' },
+                        absent: { color: '#f5222d', label: 'Відсутній(-я)' },
+                        sick: { color: '#faad14', label: 'Хворий(-а)' },
+                        vacation: { color: '#1890ff', label: 'Відпустка' }
+                    };
+                    
+                    const config = statusConfig[status] || statusConfig.absent;
+                    
+                    return (
+                        <div style={{ textAlign: 'center' }}>
                             <span style={{ 
-                                color: '#52c41a', 
-                                fontSize: '20px',
-                                fontWeight: 'bold'
+                                color: config.color, 
+                                fontWeight: '600'
                             }}>
-                                ✓
+                                {config.label}
                             </span>
-                        ) : (
-                            <span style={{ 
-                                color: '#f5222d', 
-                                fontSize: '20px',
-                                fontWeight: 'bold'
-                            }}>
-                                ✗
-                            </span>
-                        )}
-                    </div>
-                )
+                        </div>
+                    );
+                }
             },
             {
-                title: 'Дії',
+                title: 'Дія',
                 key: 'actions',
                 render: (_, record) => (
                     <div style={{
@@ -317,33 +327,37 @@ const Attendance = () => {
                         justifyContent: 'center'
                     }}>
                         <Button
-                            title={record.attendance_status === 'present' ? 'Відмітити відсутним' : 'Відвідав(ла)'}
+                            title={record.attendance_status === 'present' ? 'Відмітити відсутність' : 'Відмітити присутність'}
                             icon={checkIcon}
                             size="small"
                             className={record.attendance_status === 'present' ? 'btn--secondary' : 'btn--primary'}
                             onClick={() => toggleAttendance(record)}
-                        />
+                        >
+                            {record.attendance_status === 'present' ? 'Відмітити відсутність' : 'Відмітити присутність'}
+                        </Button>
                     </div>
                 ),
             }
         ];
         return columns;
-    }, [stateAttendance.sendData.sort_by, stateAttendance.sendData.sort_direction]);
+    }, [stateAttendance.sendData.sort_by, stateAttendance.sendData.sort_direction, stateAttendance.sendData.date, stateAttendance.selectData.date]);
 
     const tableData = useMemo(() => {
         if (data?.items?.length) {
+            const currentDate = stateAttendance.sendData.date || stateAttendance.selectData.date;
             return data.items.map((el) => ({
-                key: `${el.date}-${el.child_id}`,
-                id: el.id, // може бути null для нових записів
-                date: el.date,
+                key: `${el.child_id}`,
                 child_id: el.child_id,
                 child_name: el.child_name,
                 group_name: el.group_name,
-                attendance_status: el.attendance_status || 'absent', // за замовчуванням відсутній
+                kindergarten_name: el.kindergarten_name,
+                attendance_id: el.attendance_id,
+                attendance_status: el.attendance_status || 'absent',
+                attendance_date: currentDate, // ДОДАЙТЕ ЦЕ
             }));
         }
         return [];
-    }, [data])
+    }, [data, stateAttendance.sendData.date, stateAttendance.selectData.date])
 
     const itemMenu = [
         {
@@ -406,67 +420,64 @@ const Attendance = () => {
     // Перевіряємо чи є активні фільтри
     const hasActiveFilters = useMemo(() => {
         return Object.values(stateAttendance.selectData).some(value => {
-            if (Array.isArray(value) && !value.length) {
-                return false
-            }
-            return value !== null && value !== undefined && value !== ''
-        })
-    }, [stateAttendance.selectData])
+            if (Array.isArray(value)) return value.length > 0;
+            return value !== '' && value !== null && value !== undefined;
+        });
+    }, [stateAttendance.selectData]);
 
-    const onHandleChange = (name, value) => {
+    const onHandleChange = useCallback((field, value) => {
         setStateAttendance(prevState => ({
             ...prevState,
             selectData: {
                 ...prevState.selectData,
-                [name]: value,
-            },
+                [field]: value,
+            }
+        }))
+    }, [])
+
+    const resetFilter = () => {
+        setStateAttendance(prevState => ({
+            ...prevState,
+            selectData: {},
+            sendData: {
+                limit: prevState.sendData.limit,
+                page: 1,
+                sort_by: 'date',
+                sort_direction: 'desc',
+            }
         }))
     }
 
-    const resetFilters = () => {
-        if (Object.values(stateAttendance.selectData).some(Boolean)) {
-            setStateAttendance((prev) => ({ ...prev, selectData: {} }));
-        }
-        if (!hasOnlyAllowedParams(stateAttendance.sendData, ['limit', 'page', 'sort_by', 'sort_direction'])) {
-            setStateAttendance((prev) => ({
-                ...prev,
-                sendData: { 
-                    limit: prev.sendData.limit, 
-                    page: 1,
-                    sort_by: 'date',
-                    sort_direction: 'desc'
-                },
-                isFilterOpen: false
-            }));
-        }
-    };
-
     const applyFilter = () => {
-        const isAnyInputFilled = Object.values(stateAttendance.selectData).some((v) =>
-            Array.isArray(v) ? v.length : v,
-        );
-        if (!isAnyInputFilled) return;
-
-        const validation = validateFilters(stateAttendance.selectData);
-        if (!validation.error) {
-            setStateAttendance((prev) => ({
-                ...prev,
-                sendData: { 
-                    ...prev.sendData,
-                    ...validation, 
-                    page: 1,
-                },
-                isFilterOpen: false
-            }));
-        } else {
-            notification({
-                type: 'warning',
-                placement: 'top',
-                title: 'Помилка',
-                message: validation.message ?? 'Щось пішло не так.',
-            });
+        const isAnyInputFilled = Object.values(stateAttendance.selectData).some(value => {
+            if (Array.isArray(value) && !value.length) {
+                return false
+            }
+            return value
+        })
+        if (isAnyInputFilled) {
+            const dataValidation = validateFilters(stateAttendance.selectData)
+            if (!dataValidation.error) {
+                setStateAttendance(prevState => ({
+                    ...prevState,
+                    sendData: {
+                        ...dataValidation,
+                        limit: prevState.sendData.limit,
+                        page: 1,
+                        sort_by: prevState.sendData.sort_by,
+                        sort_direction: prevState.sendData.sort_direction,
+                    }
+                }))
+            } else {
+                notification({
+                    type: 'warning',
+                    placement: 'top',
+                    title: 'Помилка',
+                    message: dataValidation.message ?? 'Щось пішло не так.',
+                })
+            }
         }
-    };
+    }
 
     const onPageChange = useCallback((page) => {
         if (stateAttendance.sendData.page !== page) {
@@ -480,267 +491,181 @@ const Attendance = () => {
         }
     }, [stateAttendance.sendData.page])
 
-    // Функції для модального вікна завантаження групи
-    const openLoadGroupModal = () => {
-        setLoadGroupModalState(prev => ({ 
-            ...prev, 
-            isOpen: true,
-            formData: {
-                date: new Date().toISOString().split('T')[0],
-                group_id: ''
-            }
-        }));
-        document.body.style.overflow = 'hidden';
-    };
-
-    const closeLoadGroupModal = () => {
-        setLoadGroupModalState(prev => ({ ...prev, isOpen: false }));
-        document.body.style.overflow = 'auto';
-    };
-
-    const handleLoadGroupInputChange = (field, value) => {
-        setLoadGroupModalState(prev => ({
-            ...prev,
-            formData: {
-                ...prev.formData,
-                [field]: value && typeof value === 'object' && value.value 
-                    ? value.value 
-                    : value
-            }
-        }));
-    };
-
-    const handleLoadGroup = async () => {
-        const { date, group_id } = loadGroupModalState.formData;
-        
-        // Валідація
-        if (!date || !group_id) {
-            notification({
-                type: 'warning',
-                placement: 'top',
-                title: 'Помилка',
-                message: 'Будь ласка, оберіть дату та групу',
-            });
-            return;
-        }
-
-        setLoadGroupModalState(prev => ({ ...prev, loading: true }));
-
-        try {
-            // Перевіряємо чи не існують уже записи для цієї групи на цю дату
-            const existingRecords = await fetchFunction('api/kindergarten/attendance/check-group-date', {
-                method: 'POST',
-                data: {
-                    date: date,
-                    group_id: parseInt(group_id)
-                }
-            });
-
-            if (existingRecords.exists) {
-                notification({
-                    type: 'warning',
-                    placement: 'top',
-                    title: 'Дані вже існують',
-                    message: 'Для цієї групи на вказану дату записи вже існують',
-                });
-                setLoadGroupModalState(prev => ({ ...prev, loading: false }));
-                return;
-            }
-
-            // Завантажуємо дітей групи та створюємо записи відвідуваності
-            await fetchFunction('api/kindergarten/attendance/load-group', {
-                method: 'POST',
-                data: {
-                    date: date,
-                    group_id: parseInt(group_id)
-                }
-            });
-
-            notification({
-                type: 'success',
-                placement: 'top',
-                title: 'Успіх',
-                message: 'Група успішно завантажена',
-            });
-
-            closeLoadGroupModal();
-            
-            // Оновлюємо список
-            retryFetch('api/kindergarten/attendance/filter', {
-                method: 'post',
-                data: stateAttendance.sendData,
-            });
-
-        } catch (error) {
-            notification({
-                type: 'error',
-                placement: 'top',
-                title: 'Помилка',
-                message: error.message || 'Не вдалося завантажити групу',
-            });
-        } finally {
-            setLoadGroupModalState(prev => ({ ...prev, loading: false }));
-        }
-    };
-
+    // Рендер
     if (status === STATUS.ERROR) {
-        return <PageError />
-    }
-
-    if (status === STATUS.LOADING) {
-        return <SkeletonPage />
+        return <PageError title={error.message} statusError={error.status} />;
     }
 
     return (
         <>
-            <div className="page-title">
-                <h1>Відвідуваність дитячого садочка</h1>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                    <Button 
-                        title="Завантажити групу" 
-                        icon={addIcon} 
-                        onClick={openLoadGroupModal}
-                    />
-                    <Button 
-                        title="Фільтр" 
-                        icon={filterIcon} 
-                        className={hasActiveFilters ? "btn--primary" : "btn--secondary"}
-                        onClick={filterHandleClick}
-                    />
-                </div>
-            </div>
+            {status === STATUS.PENDING && <SkeletonPage />}
 
-            {/* Фільтри */}
-            <Transition in={stateAttendance.isFilterOpen} timeout={300} nodeRef={nodeRef}>
-                {state => (
-                    <div
-                        ref={nodeRef}
-                        className={`filter-dropdown ${state === 'entered' ? 'open' : ''}`}
-                        style={{
-                            maxHeight: state === 'entered' ? '500px' : '0px',
-                            overflow: 'hidden',
-                            transition: 'max-height 0.3s ease-in-out',
-                        }}
-                    >
-                        <FilterDropdown
-                            selectData={stateAttendance.selectData}
-                            onHandleChange={onHandleChange}
-                            resetFilters={resetFilters}
-                            applyFilter={applyFilter}
-                        >
-                            <Input
-                                title="ПІБ дитини"
-                                icon={searchIcon}
-                                name="child_name"
-                                value={stateAttendance.selectData.child_name || ''}
-                                onChange={(e) => onHandleChange('child_name', e.target.value)}
-                            />
-                            <Input
-                                title="Група"
-                                icon={searchIcon}
-                                name="group_name"
-                                value={stateAttendance.selectData.group_name || ''}
-                                onChange={(e) => onHandleChange('group_name', e.target.value)}
-                            />
-                            <Input
-                                title="Дата від"
-                                type="date"
-                                name="date_from"
-                                value={stateAttendance.selectData.date_from || ''}
-                                onChange={(e) => onHandleChange('date_from', e.target.value)}
-                            />
-                            <Input
-                                title="Дата до"
-                                type="date"
-                                name="date_to"
-                                value={stateAttendance.selectData.date_to || ''}
-                                onChange={(e) => onHandleChange('date_to', e.target.value)}
-                            />
-                        </FilterDropdown>
-                    </div>
-                )}
-            </Transition>
+            {status === STATUS.SUCCESS && (
+                <>
+                    <div className="table-elements">
+                        <div className="table-header">
+                            <h2 className="title title--sm">
+                                {data?.items?.length ? (
+                                    <>
+                                        Показує {startRecord !== endRecord ? `${startRecord}-${endRecord}` : startRecord} з {data?.totalItems || 1}
+                                    </>
+                                ) : (
+                                    <>Записів не знайдено</>
+                                )}
+                            </h2>
 
-            <div className="table-controls">
-                <div className="table-info">
-                    <span>
-                        Показано {startRecord} - {endRecord} з {data?.totalItems || 0} записів
-                    </span>
-                </div>
-                <div className="table-controls-right">
-                    <Dropdown menu={itemMenu} trigger="click">
-                        <Button 
-                            icon={dropDownIcon} 
-                            style={dropDownStyle}
-                            className="btn--secondary"
-                        >
-                            {stateAttendance.sendData.limit}
-                        </Button>
-                    </Dropdown>
-                </div>
-            </div>
-
-            <Table
-                columns={columns}
-                dataSource={tableData}
-                pagination={false}
-                scroll={{ x: 600 }}
-            />
-
-            <Pagination
-                current={stateAttendance.sendData.page}
-                total={data?.totalItems || 0}
-                pageSize={stateAttendance.sendData.limit}
-                onChange={onPageChange}
-                showSizeChanger={false}
-            />
-
-            {/* Модальне вікно завантаження групи */}
-            <Transition in={loadGroupModalState.isOpen} timeout={300} nodeRef={modalNodeRef}>
-                {state => (
-                    <Modal
-                        ref={modalNodeRef}
-                        isOpen={state === 'entered'}
-                        onClose={closeLoadGroupModal}
-                        title="Завантажити групу"
-                        footer={
-                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                                <Button 
-                                    title="Скасувати" 
-                                    className="btn--secondary" 
-                                    onClick={closeLoadGroupModal}
-                                    disabled={loadGroupModalState.loading}
+                            <div className="table-header__buttons">          
+                                <Dropdown
+                                    icon={dropDownIcon}
+                                    iconPosition="right"
+                                    style={dropDownStyle}
+                                    caption={`Записів: ${stateAttendance.sendData.limit}`}
+                                    menu={itemMenu}
                                 />
-                                <Button 
-                                    title="Зберегти" 
-                                    onClick={handleLoadGroup}
-                                    loading={loadGroupModalState.loading}
+                                
+                                <Button
+                                    className={classNames("table-filter-trigger", {
+                                        "has-active-filters": hasActiveFilters
+                                    })}
+                                    onClick={filterHandleClick}
+                                    icon={filterIcon}
+                                >
+                                    Фільтри
+                                </Button>
+                            </div>
+                        </div>
+
+                        <div className="table-main">
+                            <div 
+                                style={{width: data?.items?.length > 0 ? 'auto' : '100%'}} 
+                                className={classNames("table-and-pagination-wrapper", {
+                                    "table-and-pagination-wrapper--active": stateAttendance.isFilterOpen
+                                })}
+                            >
+                                <Table columns={columns} dataSource={tableData} />
+                                <Pagination
+                                    className="m-b"
+                                    currentPage={Number(data?.currentPage) || 1}
+                                    totalCount={data?.totalItems || 1}
+                                    pageSize={stateAttendance.sendData.limit}
+                                    onPageChange={onPageChange}
                                 />
                             </div>
-                        }
-                    >
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            <Input
-                                title="Дата *"
-                                type="date"
-                                value={loadGroupModalState.formData.date}
-                                onChange={(e) => handleLoadGroupInputChange('date', e.target.value)}
-                                required
-                            />
-                            <Select
-                                title="Група *"
-                                options={[
-                                    { value: '', label: 'Оберіть групу' },
-                                    ...groupsData
-                                ]}
-                                value={loadGroupModalState.formData.group_id}
-                                onChange={(value) => handleLoadGroupInputChange('group_id', value)}
-                                required
-                            />
+
+                            <Transition in={stateAttendance.isFilterOpen} timeout={300} nodeRef={nodeRef}>
+                                {state => (
+                                    <div 
+                                        ref={nodeRef}
+                                        className={classNames("table-filter", {
+                                            "table-filter--active": stateAttendance.isFilterOpen
+                                        })}
+                                        style={{
+                                            display: state === 'exited' ? 'none' : 'block'
+                                        }}
+                                    >
+                                        <h3 className="title title--sm">
+                                            Фільтри відвідуваності
+                                        </h3>
+                                        <div className="btn-group">
+                                            <Button onClick={applyFilter}>
+                                                Застосувати
+                                            </Button>
+                                            <Button className="btn--secondary" onClick={resetFilter}>
+                                                Скинути
+                                            </Button>
+                                        </div>
+                                        
+                                        <div className="table-filter__item">
+                                            <h4 className="input-description">ПІБ дитини</h4>
+                                            <Input
+                                                placeholder="Введіть ПІБ"
+                                                value={stateAttendance.selectData.child_name || ''}
+                                                onChange={(e) => onHandleChange('child_name', e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="table-filter__item">
+                                            <h4 className="input-description">Назва групи</h4>
+                                            <Input
+                                                placeholder="Введіть назву групи"
+                                                value={stateAttendance.selectData.group_name || ''}
+                                                onChange={(e) => onHandleChange('group_name', e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="table-filter__item">
+                                            <h4 className="input-description">Назва садочка</h4>
+                                            <Input
+                                                placeholder="Введіть назву садочка"
+                                                value={stateAttendance.selectData.kindergarten_name || ''}
+                                                onChange={(e) => onHandleChange('kindergarten_name', e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="table-filter__item">
+                                            <h4 className="input-description">Статус відвідуваності</h4>
+                                            <Select
+                                                placeholder="Оберіть статус"
+                                                value={
+                                                    stateAttendance.selectData.attendance_status 
+                                                        ? ATTENDANCE_STATUS_OPTIONS.find(opt => opt.value === stateAttendance.selectData.attendance_status) 
+                                                        : null
+                                                }
+                                                onChange={(value) => onHandleChange('attendance_status', value?.value || null)}
+                                                options={ATTENDANCE_STATUS_OPTIONS}
+                                                isClearable
+                                            />
+                                        </div>
+
+                                        <div className="table-filter__item">
+                                            <h4 className="input-description">Дата від</h4>
+                                            <Input
+                                                type="date"
+                                                value={stateAttendance.selectData.date_from || ''}
+                                                onChange={(e) => onHandleChange('date_from', e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="table-filter__item">
+                                            <h4 className="input-description">Дата до</h4>
+                                            <Input
+                                                type="date"
+                                                value={stateAttendance.selectData.date_to || ''}
+                                                onChange={(e) => onHandleChange('date_to', e.target.value)}
+                                            />
+                                        </div>
+
+                                        <div className="table-filter__item">
+                                            <h4 className="input-description">Дата</h4>
+                                            <Input
+                                                type="date"
+                                                value={stateAttendance.selectData.date || ''}
+                                                onChange={(e) => {
+                                                    const newDate = e.target.value;
+                                                    onHandleChange('date', newDate);
+                                                    // Одразу застосовуємо фільтр при зміні дати
+                                                    setStateAttendance(prevState => ({
+                                                        ...prevState,
+                                                        selectData: {
+                                                            ...prevState.selectData,
+                                                            date: newDate
+                                                        },
+                                                        sendData: {
+                                                            ...prevState.sendData,
+                                                            date: newDate,
+                                                            page: 1
+                                                        }
+                                                    }));
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </Transition>
                         </div>
-                    </Modal>
-                )}
-            </Transition>
+                    </div>
+                </>
+            )}
         </>
     );
 };

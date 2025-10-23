@@ -27,7 +27,15 @@ const {
     billingInfoSchema,
     billingCreateSchema,
     billingUpdateSchema,
-    billingDeleteSchema
+    billingDeleteSchema,
+    mobileAttendanceGetSchema,
+    mobileAttendanceSaveSchema,
+    adminsInfoSchema,
+    adminsFilterSchema,
+    adminsCreateSchema,
+    adminsUpdateSchema,
+    adminsDeleteSchema,
+    verifyEducatorSchema,
 } = require('../schema/kindergarten-schema');
 
 const routes = async (fastify) => {
@@ -131,7 +139,7 @@ const routes = async (fastify) => {
         schema: dailyFoodCostDeleteSchema 
     }, kindergartenController.deleteDailyFoodCost);
 
-        // Роути для батьківської плати садочку
+    // Роути для батьківської плати садочку
     fastify.post("/billing/filter", { 
         schema: billingFilterSchema 
     }, kindergartenController.findBillingByFilter);
@@ -152,6 +160,47 @@ const routes = async (fastify) => {
     fastify.delete("/billing/:id", { 
         schema: billingDeleteSchema 
     }, kindergartenController.deleteBilling);
+
+    fastify.get("/attendance/mobile/:date", { 
+        schema: mobileAttendanceGetSchema
+    }, kindergartenController.getMobileAttendance);
+
+    fastify.post("/attendance/mobile", { 
+        schema: mobileAttendanceSaveSchema
+    }, kindergartenController.saveMobileAttendance);
+
+    // ===============================
+    // РОУТИ ДЛЯ АДМІНІСТРАТОРІВ САДОЧКУ
+    // ===============================
+    
+    fastify.post("/admins/filter", { 
+        schema: adminsFilterSchema
+    }, kindergartenController.findAdminsByFilter);
+
+    fastify.get("/admins/:id", { 
+        schema: adminsInfoSchema,  
+        config: viewLimit 
+    }, kindergartenController.getAdminById);
+
+    fastify.post("/admins", { 
+        schema: adminsCreateSchema
+    }, kindergartenController.createAdmin);
+
+    fastify.put("/admins/:id", { 
+        schema: adminsUpdateSchema
+    }, kindergartenController.updateAdmin);
+
+    fastify.delete("/admins/:id", { 
+        schema: adminsDeleteSchema
+    }, kindergartenController.deleteAdmin);
+
+    // ===============================
+    // РОУТ ДЛЯ ПЕРЕВІРКИ ВИХОВАТЕЛЯ
+    // ===============================
+
+    fastify.post("/admins/verify", { 
+        schema: verifyEducatorSchema
+    }, kindergartenController.verifyEducator);
 }
 
 module.exports = routes;
