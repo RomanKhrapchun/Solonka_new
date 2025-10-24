@@ -44,7 +44,6 @@ class KindergartenService {
 
         const { offset } = paginate(page, limit);
         
-        // Логування пошуку якщо є параметри фільтрації
         if (kindergarten_name || group_name || group_type) {
             await logRepository.createLog({
                 row_pk_id: null,
@@ -82,10 +81,9 @@ class KindergartenService {
             group_type
         } = request.body;
 
-        // Перевіряємо чи не існує група з такою назвою в цьому садочку
         const existingGroup = await KindergartenRepository.getGroupByNameAndKindergarten(
-            group_name, 
-            kindergarten_name
+            kindergarten_name,
+            group_name
         );
 
         if (existingGroup && existingGroup.length > 0) {
@@ -101,7 +99,6 @@ class KindergartenService {
 
         const result = await KindergartenRepository.createGroup(groupData);
 
-        // Логування створення групи
         await logRepository.createLog({
             row_pk_id: result.insertId || result.id,
             uid: request?.user?.id,
@@ -123,18 +120,16 @@ class KindergartenService {
         const { id } = request.params;
         const updateData = request.body;
 
-        // Перевіряємо чи існує група
         const existingGroup = await KindergartenRepository.getGroupById(id);
         if (!existingGroup || existingGroup.length === 0) {
             throw new Error('Групу не знайдено');
         }
 
-        // Якщо змінюється назва групи, перевіряємо на дублікати
-        if (updateData.group_name && updateData.kindergarten_name) {
+        if (updateData.kindergarten_name && updateData.group_name) {
             const duplicateGroup = await KindergartenRepository.getGroupByNameAndKindergarten(
-                updateData.group_name, 
                 updateData.kindergarten_name,
-                id // виключаємо поточну групу
+                updateData.group_name,
+                id
             );
 
             if (duplicateGroup && duplicateGroup.length > 0) {
@@ -144,7 +139,6 @@ class KindergartenService {
 
         const result = await KindergartenRepository.updateGroup(id, updateData);
 
-        // Логування оновлення
         await logRepository.createLog({
             row_pk_id: id,
             uid: request?.user?.id,
@@ -165,7 +159,6 @@ class KindergartenService {
     async deleteGroup(request) {
         const { id } = request.params;
 
-        // Перевіряємо чи існує група
         const existingGroup = await KindergartenRepository.getGroupById(id);
         if (!existingGroup || existingGroup.length === 0) {
             throw new Error('Групу не знайдено');
@@ -173,7 +166,6 @@ class KindergartenService {
 
         const result = await KindergartenRepository.deleteGroup(id);
 
-        // Логування видалення
         await logRepository.createLog({
             row_pk_id: id,
             uid: request?.user?.id,
@@ -206,7 +198,6 @@ class KindergartenService {
 
         const { offset } = paginate(page, limit);
         
-        // Логування пошуку якщо є параметри фільтрації
         if (Object.keys(whereConditions).length > 0) {
             try {
                 await logRepository.createLog({
@@ -238,10 +229,8 @@ class KindergartenService {
         return paginationData(userData[0], page, limit, userData[1]);
     }
 
-
     async getChildById(request) {
         const { id } = request.params;
-
         const childData = await KindergartenRepository.getChildById(id);
 
         if (!childData || childData.length === 0) {
@@ -260,18 +249,6 @@ class KindergartenService {
             group_id
         } = request.body;
 
-        // Перевіряємо чи існує група
-        const existingGroup = await KindergartenRepository.getGroupById(group_id);
-        if (!existingGroup || existingGroup.length === 0) {
-            throw new Error('Група не знайдена');
-        }
-
-        // Перевірка: назва садочка має співпадати з назвою садочка групи
-        if (existingGroup[0].kindergarten_name !== kindergarten_name) {
-            throw new Error('Назва садочка не співпадає з назвою садочка групи');
-        }
-
-        // Перевіряємо чи не існує дитина з таким іменем та батьками в цьому садочку
         const existingChild = await KindergartenRepository.getChildByNameAndParent(
             child_name,
             parent_name,
@@ -279,7 +256,14 @@ class KindergartenService {
         );
 
         if (existingChild && existingChild.length > 0) {
-            throw new Error('Дитина з таким іменем та батьками вже існує в цьому садочку');
+            throw new Error('Дитина з таким ПІБ та батьком вже існує в цьому садочку');
+        }
+
+        if (group_id) {
+            const existingGroup = await KindergartenRepository.getGroupById(group_id);
+            if (!existingGroup || existingGroup.length === 0) {
+                throw new Error('Група не знайдена');
+            }
         }
 
         const childData = {
@@ -293,24 +277,19 @@ class KindergartenService {
 
         const result = await KindergartenRepository.createChild(childData);
 
-        // Логування створення
-        try {
-            await logRepository.createLog({
-                row_pk_id: result.insertId || result[0]?.id,
-                uid: request?.user?.id,
-                action: 'INSERT',
-                client_addr: request?.ip,
-                application_name: 'Створення дитини в садочку',
-                action_stamp_tx: new Date(),
-                action_stamp_stm: new Date(),
-                action_stamp_clk: new Date(),
-                schema_name: 'ower',
-                table_name: 'children_roster',
-                oid: '16506',
-            });
-        } catch (logError) {
-            console.error('[createChild] Logging error:', logError.message);
-        }
+        await logRepository.createLog({
+            row_pk_id: result.insertId || result.id,
+            uid: request?.user?.id,
+            action: 'INSERT',
+            client_addr: request?.ip,
+            application_name: 'Створення дитини',
+            action_stamp_tx: new Date(),
+            action_stamp_stm: new Date(),
+            action_stamp_clk: new Date(),
+            schema_name: 'ower',
+            table_name: 'children_roster',
+            oid: '16506',
+        });
 
         return result;
     }
@@ -319,68 +298,46 @@ class KindergartenService {
         const { id } = request.params;
         const updateData = request.body;
 
-        // Перевіряємо чи існує дитина
         const existingChild = await KindergartenRepository.getChildById(id);
         if (!existingChild || existingChild.length === 0) {
             throw new Error('Дитину не знайдено');
         }
 
-        // Якщо змінюється група, перевіряємо чи вона існує
         if (updateData.group_id) {
             const existingGroup = await KindergartenRepository.getGroupById(updateData.group_id);
             if (!existingGroup || existingGroup.length === 0) {
                 throw new Error('Група не знайдена');
             }
-
-            // Якщо змінюється група, автоматично оновлюємо назву садочка
-            if (!updateData.kindergarten_name) {
-                updateData.kindergarten_name = existingGroup[0].kindergarten_name;
-            }
-
-            // Перевірка: назва садочка має співпадати з назвою садочка групи
-            if (updateData.kindergarten_name && existingGroup[0].kindergarten_name !== updateData.kindergarten_name) {
-                throw new Error('Назва садочка не співпадає з назвою садочка групи');
-            }
         }
 
-        // Якщо змінюється ім'я дитини або батьків, перевіряємо на дублікати
-        if (updateData.child_name || updateData.parent_name || updateData.kindergarten_name) {
-            const childName = updateData.child_name || existingChild[0].child_name;
-            const parentName = updateData.parent_name || existingChild[0].parent_name;
-            const kindergartenName = updateData.kindergarten_name || existingChild[0].kindergarten_name;
-
+        if (updateData.child_name && updateData.parent_name && updateData.kindergarten_name) {
             const duplicateChild = await KindergartenRepository.getChildByNameAndParent(
-                childName,
-                parentName,
-                kindergartenName,
+                updateData.child_name,
+                updateData.parent_name,
+                updateData.kindergarten_name,
                 id
             );
 
             if (duplicateChild && duplicateChild.length > 0) {
-                throw new Error('Дитина з таким іменем та батьками вже існує в цьому садочку');
+                throw new Error('Дитина з таким ПІБ та батьком вже існує в цьому садочку');
             }
         }
 
         const result = await KindergartenRepository.updateChild(id, updateData);
 
-        // Логування оновлення
-        try {
-            await logRepository.createLog({
-                row_pk_id: id,
-                uid: request?.user?.id,
-                action: 'UPDATE',
-                client_addr: request?.ip,
-                application_name: 'Оновлення даних дитини',
-                action_stamp_tx: new Date(),
-                action_stamp_stm: new Date(),
-                action_stamp_clk: new Date(),
-                schema_name: 'ower',
-                table_name: 'children_roster',
-                oid: '16506',
-            });
-        } catch (logError) {
-            console.error('[updateChild] Logging error:', logError.message);
-        }
+        await logRepository.createLog({
+            row_pk_id: id,
+            uid: request?.user?.id,
+            action: 'UPDATE',
+            client_addr: request?.ip,
+            application_name: 'Оновлення даних дитини',
+            action_stamp_tx: new Date(),
+            action_stamp_stm: new Date(),
+            action_stamp_clk: new Date(),
+            schema_name: 'ower',
+            table_name: 'children_roster',
+            oid: '16506',
+        });
 
         return result;
     }
@@ -388,7 +345,6 @@ class KindergartenService {
     async deleteChild(request) {
         const { id } = request.params;
 
-        // Перевіряємо чи існує дитина
         const existingChild = await KindergartenRepository.getChildById(id);
         if (!existingChild || existingChild.length === 0) {
             throw new Error('Дитину не знайдено');
@@ -396,7 +352,6 @@ class KindergartenService {
 
         const result = await KindergartenRepository.deleteChild(id);
 
-        // Логування видалення
         try {
             await logRepository.createLog({
                 row_pk_id: id,
@@ -438,7 +393,6 @@ class KindergartenService {
 
         const { offset } = paginate(page, limit);
         
-        // Отримуємо поточну дату для України, якщо дата не вказана
         const getCurrentUkraineDate = () => {
             const now = new Date();
             const ukraineTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Kyiv' }));
@@ -447,7 +401,6 @@ class KindergartenService {
         
         const filterDate = date || getCurrentUkraineDate();
         
-        // Логування пошуку якщо є параметри фільтрації
         if (child_name || group_name || kindergarten_name || attendance_status) {
             await logRepository.createLog({
                 row_pk_id: null,
@@ -499,13 +452,11 @@ class KindergartenService {
             notes
         } = request.body;
 
-        // Перевіряємо чи існує дитина
         const existingChild = await KindergartenRepository.getChildById(child_id);
         if (!existingChild || existingChild.length === 0) {
             throw new Error('Дитину не знайдено');
         }
 
-        // Перевіряємо чи не існує запис на цю дату для цієї дитини
         const existingAttendance = await KindergartenRepository.getAttendanceByDateAndChild(date, child_id);
 
         if (existingAttendance && existingAttendance.length > 0) {
@@ -522,7 +473,6 @@ class KindergartenService {
 
         const result = await KindergartenRepository.createAttendance(attendanceData);
 
-        // Логування створення
         await logRepository.createLog({
             row_pk_id: result.insertId || result.id,
             uid: request?.user?.id,
@@ -544,13 +494,11 @@ class KindergartenService {
         const { id } = request.params;
         const updateData = request.body;
 
-        // Перевіряємо чи існує запис
         const existingRecord = await KindergartenRepository.getAttendanceById(id);
         if (!existingRecord || existingRecord.length === 0) {
             throw new Error('Запис відвідуваності не знайдено');
         }
 
-        // Якщо змінюється дитина, перевіряємо чи вона існує
         if (updateData.child_id) {
             const existingChild = await KindergartenRepository.getChildById(updateData.child_id);
             if (!existingChild || existingChild.length === 0) {
@@ -558,12 +506,11 @@ class KindergartenService {
             }
         }
 
-        // Якщо змінюється дата або дитина, перевіряємо на дублікати
         if (updateData.date && updateData.child_id) {
             const duplicateRecord = await KindergartenRepository.getAttendanceByDateAndChild(
                 updateData.date, 
                 updateData.child_id,
-                id // виключаємо поточний запис
+                id
             );
 
             if (duplicateRecord && duplicateRecord.length > 0) {
@@ -573,7 +520,6 @@ class KindergartenService {
 
         const result = await KindergartenRepository.updateAttendance(id, updateData);
 
-        // Логування оновлення
         await logRepository.createLog({
             row_pk_id: id,
             uid: request?.user?.id,
@@ -594,7 +540,6 @@ class KindergartenService {
     async deleteAttendance(request) {
         const { id } = request.params;
 
-        // Перевіряємо чи існує запис
         const existingRecord = await KindergartenRepository.getAttendanceById(id);
         if (!existingRecord || existingRecord.length === 0) {
             throw new Error('Запис відвідуваності не знайдено');
@@ -602,7 +547,6 @@ class KindergartenService {
 
         const result = await KindergartenRepository.deleteAttendance(id);
 
-        // Логування видалення
         await logRepository.createLog({
             row_pk_id: id,
             uid: request?.user?.id,
@@ -637,7 +581,6 @@ class KindergartenService {
 
         const { offset } = paginate(page, limit);
         
-        // Логування пошуку якщо є параметри фільтрації
         if (date_from || date_to) {
             await logRepository.createLog({
                 row_pk_id: null,
@@ -674,7 +617,6 @@ class KindergartenService {
             older_group_cost
         } = request.body;
 
-        // Перевіряємо чи не існує запис з такою датою
         const existingRecord = await KindergartenRepository.getDailyFoodCostByDateAndExcludeId(date);
 
         if (existingRecord && existingRecord.length > 0) {
@@ -690,7 +632,6 @@ class KindergartenService {
 
         const result = await KindergartenRepository.createDailyFoodCost(recordData);
 
-        // Логування створення
         await logRepository.createLog({
             row_pk_id: result.insertId || result.id,
             uid: request?.user?.id,
@@ -712,13 +653,11 @@ class KindergartenService {
         const { id } = request.params;
         const updateData = request.body;
 
-        // Перевіряємо чи існує запис
         const existingRecord = await KindergartenRepository.getDailyFoodCostById(id);
         if (!existingRecord || existingRecord.length === 0) {
             throw new Error('Запис не знайдено');
         }
 
-        // Якщо змінюється дата, перевіряємо на дублікати
         if (updateData.date) {
             const duplicateRecord = await KindergartenRepository.getDailyFoodCostByDateAndExcludeId(
                 updateData.date, 
@@ -732,7 +671,6 @@ class KindergartenService {
 
         const result = await KindergartenRepository.updateDailyFoodCost(id, updateData);
 
-        // Логування оновлення
         await logRepository.createLog({
             row_pk_id: id,
             uid: request?.user?.id,
@@ -753,7 +691,6 @@ class KindergartenService {
     async deleteDailyFoodCost(request) {
         const { id } = request.params;
 
-        // Перевіряємо чи існує запис
         const existingRecord = await KindergartenRepository.getDailyFoodCostById(id);
         if (!existingRecord || existingRecord.length === 0) {
             throw new Error('Запис не знайдено');
@@ -761,7 +698,6 @@ class KindergartenService {
 
         const result = await KindergartenRepository.deleteDailyFoodCost(id);
 
-        // Логування видалення
         await logRepository.createLog({
             row_pk_id: id,
             uid: request?.user?.id,
@@ -799,7 +735,6 @@ class KindergartenService {
 
         const { offset } = paginate(page, limit);
         
-        // Логування пошуку якщо є параметри фільтрації
         if (payment_month_from || payment_month_to || parent_name || balance_min || balance_max) {
             await logRepository.createLog({
                 row_pk_id: null,
@@ -840,11 +775,10 @@ class KindergartenService {
             throw new Error('Запис батьківської плати не знайдено');
         }
 
-        // Логування перегляду
         await logRepository.createLog({
             row_pk_id: id,
             uid: request?.user?.id,
-            action: 'VIEW',
+            action: 'SEARCH',
             client_addr: request?.ip,
             application_name: 'Перегляд батьківської плати',
             action_stamp_tx: new Date(),
@@ -868,7 +802,6 @@ class KindergartenService {
             notes
         } = request.body;
 
-        // Перевіряємо чи не існує запис з такими ПІБ та місяцем
         const existingRecord = await KindergartenRepository.getBillingByParentAndMonth(
             parent_name, 
             payment_month
@@ -890,7 +823,6 @@ class KindergartenService {
 
         const result = await KindergartenRepository.createBilling(recordData);
 
-        // Логування створення
         await logRepository.createLog({
             row_pk_id: result.insertId || result.id,
             uid: request?.user?.id,
@@ -912,31 +844,25 @@ class KindergartenService {
         const { id } = request.params;
         const updateData = request.body;
 
-        // Перевіряємо чи існує запис
         const existingRecord = await KindergartenRepository.getBillingById(id);
         if (!existingRecord || existingRecord.length === 0) {
-            throw new Error('Запис не знайдено');
+            throw new Error('Запис батьківської плати не знайдено');
         }
 
-        // Якщо змінюються ПІБ або місяць, перевіряємо на дублікати
-        if (updateData.parent_name || updateData.payment_month) {
-            const parent_name = updateData.parent_name || existingRecord[0].parent_name;
-            const payment_month = updateData.payment_month || existingRecord[0].payment_month;
-            
-            const duplicateRecord = await KindergartenRepository.getBillingByParentAndMonthExcludeId(
-                parent_name, 
-                payment_month,
+        if (updateData.parent_name && updateData.payment_month) {
+            const duplicateRecord = await KindergartenRepository.getBillingByParentAndMonth(
+                updateData.parent_name,
+                updateData.payment_month,
                 id
             );
 
             if (duplicateRecord && duplicateRecord.length > 0) {
-                throw new Error(`Запис батьківської плати для "${parent_name}" на ${new Date(payment_month).toLocaleDateString('uk-UA', { year: 'numeric', month: 'long' })} вже існує`);
+                throw new Error(`Запис батьківської плати для "${updateData.parent_name}" на ${new Date(updateData.payment_month).toLocaleDateString('uk-UA', { year: 'numeric', month: 'long' })} вже існує`);
             }
         }
 
         const result = await KindergartenRepository.updateBilling(id, updateData);
 
-        // Логування оновлення
         await logRepository.createLog({
             row_pk_id: id,
             uid: request?.user?.id,
@@ -957,15 +883,13 @@ class KindergartenService {
     async deleteBilling(request) {
         const { id } = request.params;
 
-        // Перевіряємо чи існує запис
         const existingRecord = await KindergartenRepository.getBillingById(id);
         if (!existingRecord || existingRecord.length === 0) {
-            throw new Error('Запис не знайдено');
+            throw new Error('Запис батьківської плати не знайдено');
         }
 
         const result = await KindergartenRepository.deleteBilling(id);
 
-        // Логування видалення
         await logRepository.createLog({
             row_pk_id: id,
             uid: request?.user?.id,
@@ -984,7 +908,7 @@ class KindergartenService {
     }
 
     // ===============================
-    // API ДЛЯ МОБІЛЬНОГО ДОДАТКУ
+    // ✅ API ДЛЯ МОБІЛЬНОГО ДОДАТКУ (ВИПРАВЛЕНО - TOGGLE ЛОГІКА)
     // ===============================
 
     async getMobileAttendance(timestamp, request) {
@@ -999,7 +923,7 @@ class KindergartenService {
             await logRepository.createLog({
                 row_pk_id: null,
                 uid: request.user.id,
-                action: 'VIEW',
+                action: 'SEARCH',
                 client_addr: request?.ip,
                 application_name: 'Мобільний додаток - перегляд відвідуваності',
                 action_stamp_tx: new Date(),
@@ -1028,8 +952,9 @@ class KindergartenService {
         return response;
     }
     
+    // ✅ ВИПРАВЛЕНИЙ МЕТОД З TOGGLE ЛОГІКОЮ
     async saveMobileAttendance(request) {
-        const { date, groups } = request.body;
+        const { date, children } = request.body;  // ✅ НОВИЙ ФОРМАТ - масив ID дітей
         
         // Конвертуємо timestamp в дату
         const dateString = new Date(date * 1000).toISOString().split('T')[0];
@@ -1037,50 +962,52 @@ class KindergartenService {
         const results = [];
         const errors = [];
         
-        // Проходимо по всіх групах та дітях
-        for (const group of groups) {
-            for (const child of group.group) {
-                try {
-                    const attendance_status = child.selected ? 'present' : 'absent';
+        // Проходимо по всіх дітях на яких НАТИСНУЛИ в мобільному
+        for (const childId of children) {
+            try {
+                // Перевіряємо чи існує запис відвідуваності на цю дату для цієї дитини
+                const existingAttendance = await KindergartenRepository.getAttendanceByDateAndChild(
+                    dateString, 
+                    childId
+                );
+                
+                if (existingAttendance && existingAttendance.length > 0) {
+                    // ✅ TOGGLE - перемикаємо статус на протилежний
+                    const currentStatus = existingAttendance[0].attendance_status;
+                    const newStatus = currentStatus === 'present' ? 'absent' : 'present';
                     
-                    // Перевіряємо чи існує запис відвідуваності на цю дату для цієї дитини
-                    const existingAttendance = await KindergartenRepository.getAttendanceByDateAndChild(
-                        dateString, 
-                        child.id
+                    await KindergartenRepository.updateAttendance(
+                        existingAttendance[0].id,
+                        { attendance_status: newStatus }
                     );
                     
-                    if (existingAttendance && existingAttendance.length > 0) {
-                        // Оновлюємо існуючий запис
-                        await KindergartenRepository.updateAttendance(
-                            existingAttendance[0].id,
-                            { attendance_status }
-                        );
-                        results.push({
-                            child_id: child.id,
-                            action: 'updated',
-                            status: attendance_status
-                        });
-                    } else {
-                        // Створюємо новий запис
-                        await KindergartenRepository.createAttendance({
-                            date: dateString,
-                            child_id: child.id,
-                            attendance_status,
-                            notes: null,
-                            created_at: new Date()
-                        });
-                        results.push({
-                            child_id: child.id,
-                            action: 'created',
-                            status: attendance_status
-                        });
-                    }
-                } catch (error) {
-                    errors.push({
-                        child_id: child.id,
-                        error: error.message
+                    results.push({
+                        child_id: childId,
+                        action: 'toggled',
+                        old_status: currentStatus,
+                        new_status: newStatus
+                    });
+                } else {
+                    // Немає запису - створюємо з present (якщо натиснув значить прийшов)
+                    await KindergartenRepository.createAttendance({
+                        date: dateString,
+                        child_id: childId,
+                        attendance_status: 'present',
+                        notes: null,
+                        created_at: new Date()
+                    });
+                    
+                    results.push({
+                        child_id: childId,
+                        action: 'created',
+                        new_status: 'present'
                     });
                 }
+            } catch (error) {
+                errors.push({
+                    child_id: childId,
+                    error: error.message
+                });
             }
         }
         
@@ -1091,7 +1018,7 @@ class KindergartenService {
                 uid: request.user.id,
                 action: 'UPDATE',
                 client_addr: request?.ip,
-                application_name: 'Мобільний додаток - збереження відвідуваності',
+                application_name: 'Мобільний додаток - збереження відвідуваності (toggle)',
                 action_stamp_tx: new Date(),
                 action_stamp_stm: new Date(),
                 action_stamp_clk: new Date(),
@@ -1130,7 +1057,6 @@ class KindergartenService {
 
         const { offset } = paginate(page, limit);
         
-        // Логування пошуку якщо є параметри фільтрації
         if (phone_number || full_name || kindergarten_name || role) {
             await logRepository.createLog({
                 row_pk_id: null,
@@ -1181,7 +1107,6 @@ class KindergartenService {
             role = 'educator'
         } = request.body;
 
-        // Перевіряємо чи не існує адміністратор з таким номером телефону
         const existingAdmin = await KindergartenRepository.getAdminByPhone(phone_number);
 
         if (existingAdmin && existingAdmin.length > 0) {
@@ -1198,7 +1123,6 @@ class KindergartenService {
 
         const result = await KindergartenRepository.createAdmin(adminData);
 
-        // Логування створення
         await logRepository.createLog({
             row_pk_id: result.insertId || result[0]?.id,
             uid: request?.user?.id,
@@ -1220,13 +1144,11 @@ class KindergartenService {
         const { id } = request.params;
         const updateData = request.body;
 
-        // Перевіряємо чи існує адміністратор
         const existingAdmin = await KindergartenRepository.getAdminById(id);
         if (!existingAdmin || existingAdmin.length === 0) {
             throw new Error('Адміністратора не знайдено');
         }
 
-        // Якщо змінюється номер телефону, перевіряємо на дублікати
         if (updateData.phone_number) {
             const duplicateAdmin = await KindergartenRepository.getAdminByPhone(
                 updateData.phone_number,
@@ -1240,7 +1162,6 @@ class KindergartenService {
 
         const result = await KindergartenRepository.updateAdmin(id, updateData);
 
-        // Логування оновлення
         await logRepository.createLog({
             row_pk_id: id,
             uid: request?.user?.id,
@@ -1261,7 +1182,6 @@ class KindergartenService {
     async deleteAdmin(request) {
         const { id } = request.params;
 
-        // Перевіряємо чи існує адміністратор
         const existingAdmin = await KindergartenRepository.getAdminById(id);
         if (!existingAdmin || existingAdmin.length === 0) {
             throw new Error('Адміністратора не знайдено');
@@ -1269,7 +1189,6 @@ class KindergartenService {
 
         const result = await KindergartenRepository.deleteAdmin(id);
 
-        // Логування видалення
         await logRepository.createLog({
             row_pk_id: id,
             uid: request?.user?.id,
@@ -1295,29 +1214,25 @@ class KindergartenService {
         try {
             let { phone_number } = request.body;
 
-            // ПЕРЕВІРКА 1: Номер телефону обов'язковий
             if (!phone_number) {
                 throw new Error('Номер телефону обов\'язковий');
             }
 
             console.log('[verifyEducator] Original phone:', phone_number);
 
-            // НОРМАЛІЗАЦІЯ НОМЕРА: видаляємо пробіли, дужки, дефіси
+            // Нормалізація номера
             phone_number = phone_number.replace(/[\s\-\(\)]/g, '');
             
-            // Якщо номер починається з 0, додаємо +38
             if (phone_number.startsWith('0')) {
                 phone_number = '+38' + phone_number;
             }
             
-            // Якщо немає +, додаємо +
             if (!phone_number.startsWith('+')) {
                 phone_number = '+' + phone_number;
             }
 
             console.log('[verifyEducator] Normalized phone:', phone_number);
 
-            // ЗАПИТ ДО БАЗИ ДАНИХ
             let educator;
             try {
                 educator = await KindergartenRepository.verifyEducator(phone_number);
@@ -1327,13 +1242,13 @@ class KindergartenService {
                 throw new Error(`Помилка запиту до бази даних: ${dbError.message}`);
             }
 
-            // ЛОГУВАННЯ (з обробкою помилок)
+            // Логування
             if (request?.user?.id) {
                 try {
                     await logRepository.createLog({
                         row_pk_id: educator && educator.length > 0 ? educator[0].id : null,
                         uid: request.user.id,
-                        action: 'VIEW',
+                        action: 'SEARCH',
                         client_addr: request?.ip,
                         application_name: 'Перевірка вихователя (мобільний додаток)',
                         action_stamp_tx: new Date(),
@@ -1344,14 +1259,12 @@ class KindergartenService {
                         oid: '16510',
                     });
                 } catch (logError) {
-                    // Логування не критично - просто виводимо в консоль
                     console.error('[verifyEducator] Logging error (non-critical):', logError.message);
                 }
             } else {
                 console.warn('[verifyEducator] request.user.id not found - logging skipped');
             }
 
-            // ПОВЕРТАЄМО РЕЗУЛЬТАТ
             const result = {
                 isEducator: educator && educator.length > 0,
                 educatorInfo: educator && educator.length > 0 ? {
@@ -1368,7 +1281,7 @@ class KindergartenService {
 
         } catch (error) {
             console.error('[verifyEducator] Fatal error:', error);
-            throw error; // Передаємо помилку далі в controller
+            throw error;
         }
     }
 }
