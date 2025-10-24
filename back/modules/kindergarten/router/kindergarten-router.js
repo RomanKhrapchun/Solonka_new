@@ -63,110 +63,142 @@ const routes = async (fastify) => {
 
     // Роути для груп садочків
     fastify.post("/groups/filter", { 
-        schema: kindergartenGroupFilterSchema 
+        schema: kindergartenGroupFilterSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW })
     }, kindergartenController.findGroupsByFilter);
 
     fastify.post("/groups", { 
-        schema: kindergartenGroupCreateSchema 
+        schema: kindergartenGroupCreateSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.INSERT })
     }, kindergartenController.createGroup);
 
     fastify.put("/groups/:id", { 
-        schema: kindergartenGroupUpdateSchema 
+        schema: kindergartenGroupUpdateSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.EDIT })
     }, kindergartenController.updateGroup);
 
     fastify.delete("/groups/:id", { 
-        schema: kindergartenGroupDeleteSchema 
+        schema: kindergartenGroupDeleteSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.DELETE })
     }, kindergartenController.deleteGroup);
 
     // Роути для дітей садочку
     fastify.post("/childrenRoster/filter", { 
-        schema: childrenFilterSchema, 
+        schema: childrenFilterSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW })
     }, kindergartenController.findChildrenByFilter);
 
     fastify.get("/childrenRoster/:id", { 
         schema: childrenInfoSchema,  
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW }),
         config: viewLimit 
     }, kindergartenController.getChildById);
 
     fastify.post("/childrenRoster", { 
-        schema: childrenCreateSchema 
+        schema: childrenCreateSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.INSERT })
     }, kindergartenController.createChild);
 
     fastify.put("/childrenRoster/:id", { 
-        schema: childrenUpdateSchema 
+        schema: childrenUpdateSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.EDIT })
     }, kindergartenController.updateChild);
 
     fastify.delete("/childrenRoster/:id", { 
-        schema: childrenDeleteSchema 
+        schema: childrenDeleteSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.DELETE })
     }, kindergartenController.deleteChild);
 
-    // Роути для відвідуваності садочку
+    // ===============================
+    // РОУТИ ДЛЯ ВІДВІДУВАНОСТІ САДОЧКУ
+    // ===============================
+    
     fastify.post("/attendance/filter", { 
-        schema: attendanceFilterSchema, 
+        schema: attendanceFilterSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW })
     }, kindergartenController.findAttendanceByFilter);
 
     fastify.get("/attendance/:id", { 
         schema: attendanceInfoSchema,  
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW }),
         config: viewLimit 
     }, kindergartenController.getAttendanceById);
 
     fastify.post("/attendance", { 
-        schema: attendanceCreateSchema 
+        schema: attendanceCreateSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.INSERT })
     }, kindergartenController.createAttendance);
 
     fastify.put("/attendance/:id", { 
-        schema: attendanceUpdateSchema 
+        schema: attendanceUpdateSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.EDIT })
     }, kindergartenController.updateAttendance);
 
     fastify.delete("/attendance/:id", { 
-        schema: attendanceDeleteSchema 
+        schema: attendanceDeleteSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.DELETE })
     }, kindergartenController.deleteAttendance);
 
     // Роути для вартості харчування садочку
     fastify.post("/daily_food_cost/filter", { 
-        schema: dailyFoodCostFilterSchema 
+        schema: dailyFoodCostFilterSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW })
     }, kindergartenController.findDailyFoodCostByFilter);
 
     fastify.post("/daily_food_cost", { 
-        schema: dailyFoodCostCreateSchema 
+        schema: dailyFoodCostCreateSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.INSERT })
     }, kindergartenController.createDailyFoodCost);
 
     fastify.put("/daily_food_cost/:id", { 
-        schema: dailyFoodCostUpdateSchema 
+        schema: dailyFoodCostUpdateSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.EDIT })
     }, kindergartenController.updateDailyFoodCost);
 
     fastify.delete("/daily_food_cost/:id", { 
-        schema: dailyFoodCostDeleteSchema 
+        schema: dailyFoodCostDeleteSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.DELETE })
     }, kindergartenController.deleteDailyFoodCost);
 
     // Роути для батьківської плати садочку
     fastify.post("/billing/filter", { 
-        schema: billingFilterSchema 
+        schema: billingFilterSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW })
     }, kindergartenController.findBillingByFilter);
 
     fastify.get("/billing/:id", { 
         schema: billingInfoSchema,  
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW }),
         config: viewLimit 
     }, kindergartenController.getBillingById);
 
     fastify.post("/billing", { 
-        schema: billingCreateSchema 
+        schema: billingCreateSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.INSERT })
     }, kindergartenController.createBilling);
 
     fastify.put("/billing/:id", { 
-        schema: billingUpdateSchema 
+        schema: billingUpdateSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.EDIT })
     }, kindergartenController.updateBilling);
 
     fastify.delete("/billing/:id", { 
-        schema: billingDeleteSchema 
+        schema: billingDeleteSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.DELETE })
     }, kindergartenController.deleteBilling);
 
+    // ===============================
+    // РОУТИ ДЛЯ МОБІЛЬНОГО ДОДАТКУ
+    // ===============================
+    
     fastify.get("/attendance/mobile/:date", { 
-        schema: mobileAttendanceGetSchema
+        schema: mobileAttendanceGetSchema,
+        preParsing: RouterGuard()  // Мінімальна авторизація без перевірки прав
     }, kindergartenController.getMobileAttendance);
 
     fastify.post("/attendance/mobile", { 
-        schema: mobileAttendanceSaveSchema
+        schema: mobileAttendanceSaveSchema,
+        preParsing: RouterGuard()  // Мінімальна авторизація без перевірки прав
     }, kindergartenController.saveMobileAttendance);
 
     // ===============================
@@ -174,24 +206,29 @@ const routes = async (fastify) => {
     // ===============================
     
     fastify.post("/admins/filter", { 
-        schema: adminsFilterSchema
+        schema: adminsFilterSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW })
     }, kindergartenController.findAdminsByFilter);
 
     fastify.get("/admins/:id", { 
         schema: adminsInfoSchema,  
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.VIEW }),
         config: viewLimit 
     }, kindergartenController.getAdminById);
 
     fastify.post("/admins", { 
-        schema: adminsCreateSchema
+        schema: adminsCreateSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.INSERT })
     }, kindergartenController.createAdmin);
 
     fastify.put("/admins/:id", { 
-        schema: adminsUpdateSchema
+        schema: adminsUpdateSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.EDIT })
     }, kindergartenController.updateAdmin);
 
     fastify.delete("/admins/:id", { 
-        schema: adminsDeleteSchema
+        schema: adminsDeleteSchema,
+        preParsing: RouterGuard({ permissionLevel: "debtor", permissions: accessLevel.DELETE })
     }, kindergartenController.deleteAdmin);
 
     // ===============================
@@ -199,7 +236,8 @@ const routes = async (fastify) => {
     // ===============================
 
     fastify.post("/admins/verify", { 
-        schema: verifyEducatorSchema
+        schema: verifyEducatorSchema,
+        preParsing: RouterGuard()  // Мінімальна авторизація без перевірки прав
     }, kindergartenController.verifyEducator);
 }
 

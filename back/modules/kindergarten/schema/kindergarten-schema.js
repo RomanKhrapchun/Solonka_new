@@ -129,10 +129,10 @@ const childrenInfoSchema = {
     params: {
         id: {
             type: 'string',
-            numeric: true,
-        },
+            numeric: true
+        }
     }
-}
+};
 
 const childrenFilterSchema = {
     body: {
@@ -141,39 +141,45 @@ const childrenFilterSchema = {
             optional: true,
         },
         limit: {
-            type: 'number', 
+            type: 'number',
             optional: true,
         },
         sort_by: {
             type: 'string',
             optional: true,
+            enum: ['id', 'child_name', 'parent_name', 'kindergarten_name', 'created_at']
         },
         sort_direction: {
             type: 'string',
             optional: true,
+            enum: ['asc', 'desc']
         },
         child_name: {
             type: 'string',
             optional: true,
-            min: 1,
+            min: 1
         },
         parent_name: {
             type: 'string',
             optional: true,
-            min: 1,
+            min: 1
         },
         phone_number: {
             type: 'string',
-            pattern: '^[0-9\\s\\-\\(\\)]{10,20}$',
             optional: true,
+            min: 1
+        },
+        kindergarten_name: {
+            type: 'string',
+            optional: true,
+            min: 1
         },
         group_id: {
             type: 'number',
-            minimum: 1,
-            optional: true,
-        },
+            optional: true
+        }
     }
-}
+};
 
 const childrenCreateSchema = {
     body: {
@@ -181,29 +187,39 @@ const childrenCreateSchema = {
             type: 'string',
             min: 1,
             max: 100,
+            trim: true
         },
         parent_name: {
             type: 'string',
             min: 1,
             max: 100,
+            trim: true
         },
         phone_number: {
             type: 'string',
-            pattern: '^[0-9\\s\\-\\(\\)]{10,20}$',
-            optional: true,
+            min: 10,
+            max: 20,
+            optional: true
+        },
+        kindergarten_name: {
+            type: 'string',
+            min: 1,
+            max: 100,
+            trim: true
         },
         group_id: {
             type: 'number',
-            minimum: 1,
-        },
+            positive: true
+        }
     }
-}
+};
+
 
 const childrenUpdateSchema = {
     params: {
         id: {
             type: 'string',
-            numeric: true,
+            numeric: true
         }
     },
     body: {
@@ -211,35 +227,45 @@ const childrenUpdateSchema = {
             type: 'string',
             min: 1,
             max: 100,
-            optional: true,
+            trim: true,
+            optional: true
         },
         parent_name: {
             type: 'string',
             min: 1,
             max: 100,
-            optional: true,
+            trim: true,
+            optional: true
         },
         phone_number: {
             type: 'string',
-            pattern: '^[0-9\\s\\-\\(\\)]{10,20}$',
-            optional: true,
+            min: 10,
+            max: 20,
+            optional: true
+        },
+        kindergarten_name: {
+            type: 'string',
+            min: 1,
+            max: 100,
+            trim: true,
+            optional: true
         },
         group_id: {
             type: 'number',
-            minimum: 1,
-            optional: true,
-        },
+            positive: true,
+            optional: true
+        }
     }
-}
+};
 
 const childrenDeleteSchema = {
     params: {
         id: {
             type: 'string',
-            numeric: true,
+            numeric: true
         }
     }
-}
+};
 
 // ===============================
 // СХЕМИ ДЛЯ ВІДВІДУВАНОСТІ

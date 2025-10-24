@@ -199,32 +199,32 @@ class KindergartenService {
         const { 
             page = 1, 
             limit = 16, 
-            sort_by = 'id', 
-            sort_direction = 'desc',
-            child_name,
-            parent_name,
-            phone_number,
-            group_id,
+            sort_by = 'child_name', 
+            sort_direction = 'asc',
             ...whereConditions 
         } = request.body;
 
         const { offset } = paginate(page, limit);
         
         // Логування пошуку якщо є параметри фільтрації
-        if (child_name || parent_name || phone_number || group_id) {
-            await logRepository.createLog({
-                row_pk_id: null,
-                uid: request?.user?.id,
-                action: 'SEARCH',
-                client_addr: request?.ip,
-                application_name: 'Пошук дітей садочку',
-                action_stamp_tx: new Date(),
-                action_stamp_stm: new Date(),
-                action_stamp_clk: new Date(),
-                schema_name: 'ower',
-                table_name: 'children_roster',
-                oid: '16506',
-            });
+        if (Object.keys(whereConditions).length > 0) {
+            try {
+                await logRepository.createLog({
+                    row_pk_id: null,
+                    uid: request?.user?.id,
+                    action: 'SEARCH',
+                    client_addr: request?.ip,
+                    application_name: 'Пошук дітей садочка',
+                    action_stamp_tx: new Date(),
+                    action_stamp_stm: new Date(),
+                    action_stamp_clk: new Date(),
+                    schema_name: 'ower',
+                    table_name: 'children_roster',
+                    oid: '16506',
+                });
+            } catch (logError) {
+                console.error('[findChildrenByFilter] Logging error:', logError.message);
+            }
         }
 
         const userData = await KindergartenRepository.findChildrenByFilter({
@@ -232,20 +232,18 @@ class KindergartenService {
             offset,
             sort_by,
             sort_direction,
-            child_name,
-            parent_name,
-            phone_number,
-            group_id,
             ...whereConditions
         });
 
-        return paginationData(userData[0], page, limit);
+        return paginationData(userData[0], page, limit, userData[1]);
     }
+
 
     async getChildById(request) {
         const { id } = request.params;
-        
+
         const childData = await KindergartenRepository.getChildById(id);
+
         if (!childData || childData.length === 0) {
             throw new Error('Дитину не знайдено');
         }
@@ -258,6 +256,7 @@ class KindergartenService {
             child_name,
             parent_name,
             phone_number,
+            kindergarten_name,
             group_id
         } = request.body;
 
@@ -267,40 +266,51 @@ class KindergartenService {
             throw new Error('Група не знайдена');
         }
 
-        // Перевіряємо чи не існує дитина з таким же ПІБ в тій же групі
-        const existingChild = await KindergartenRepository.getChildByNameAndGroup(
-            child_name, 
-            group_id
+        // Перевірка: назва садочка має співпадати з назвою садочка групи
+        if (existingGroup[0].kindergarten_name !== kindergarten_name) {
+            throw new Error('Назва садочка не співпадає з назвою садочка групи');
+        }
+
+        // Перевіряємо чи не існує дитина з таким іменем та батьками в цьому садочку
+        const existingChild = await KindergartenRepository.getChildByNameAndParent(
+            child_name,
+            parent_name,
+            kindergarten_name
         );
 
         if (existingChild && existingChild.length > 0) {
-            throw new Error('Дитина з таким ПІБ вже існує в цій групі');
+            throw new Error('Дитина з таким іменем та батьками вже існує в цьому садочку');
         }
 
         const childData = {
             child_name,
             parent_name,
             phone_number,
+            kindergarten_name,
             group_id,
             created_at: new Date()
         };
 
         const result = await KindergartenRepository.createChild(childData);
 
-        // Логування створення дитини
-        await logRepository.createLog({
-            row_pk_id: result.insertId || result.id,
-            uid: request?.user?.id,
-            action: 'INSERT',
-            client_addr: request?.ip,
-            application_name: 'Створення запису дитини',
-            action_stamp_tx: new Date(),
-            action_stamp_stm: new Date(),
-            action_stamp_clk: new Date(),
-            schema_name: 'ower',
-            table_name: 'children_roster',
-            oid: '16506',
-        });
+        // Логування створення
+        try {
+            await logRepository.createLog({
+                row_pk_id: result.insertId || result[0]?.id,
+                uid: request?.user?.id,
+                action: 'INSERT',
+                client_addr: request?.ip,
+                application_name: 'Створення дитини в садочку',
+                action_stamp_tx: new Date(),
+                action_stamp_stm: new Date(),
+                action_stamp_clk: new Date(),
+                schema_name: 'ower',
+                table_name: 'children_roster',
+                oid: '16506',
+            });
+        } catch (logError) {
+            console.error('[createChild] Logging error:', logError.message);
+        }
 
         return result;
     }
@@ -321,37 +331,56 @@ class KindergartenService {
             if (!existingGroup || existingGroup.length === 0) {
                 throw new Error('Група не знайдена');
             }
+
+            // Якщо змінюється група, автоматично оновлюємо назву садочка
+            if (!updateData.kindergarten_name) {
+                updateData.kindergarten_name = existingGroup[0].kindergarten_name;
+            }
+
+            // Перевірка: назва садочка має співпадати з назвою садочка групи
+            if (updateData.kindergarten_name && existingGroup[0].kindergarten_name !== updateData.kindergarten_name) {
+                throw new Error('Назва садочка не співпадає з назвою садочка групи');
+            }
         }
 
-        // Якщо змінюється ПІБ дитини та група, перевіряємо на дублікати
-        if (updateData.child_name && updateData.group_id) {
-            const duplicateChild = await KindergartenRepository.getChildByNameAndGroup(
-                updateData.child_name, 
-                updateData.group_id,
-                id // виключаємо поточну дитину
+        // Якщо змінюється ім'я дитини або батьків, перевіряємо на дублікати
+        if (updateData.child_name || updateData.parent_name || updateData.kindergarten_name) {
+            const childName = updateData.child_name || existingChild[0].child_name;
+            const parentName = updateData.parent_name || existingChild[0].parent_name;
+            const kindergartenName = updateData.kindergarten_name || existingChild[0].kindergarten_name;
+
+            const duplicateChild = await KindergartenRepository.getChildByNameAndParent(
+                childName,
+                parentName,
+                kindergartenName,
+                id
             );
 
             if (duplicateChild && duplicateChild.length > 0) {
-                throw new Error('Дитина з таким ПІБ вже існує в цій групі');
+                throw new Error('Дитина з таким іменем та батьками вже існує в цьому садочку');
             }
         }
 
         const result = await KindergartenRepository.updateChild(id, updateData);
 
         // Логування оновлення
-        await logRepository.createLog({
-            row_pk_id: id,
-            uid: request?.user?.id,
-            action: 'UPDATE',
-            client_addr: request?.ip,
-            application_name: 'Оновлення даних дитини',
-            action_stamp_tx: new Date(),
-            action_stamp_stm: new Date(),
-            action_stamp_clk: new Date(),
-            schema_name: 'ower',
-            table_name: 'children_roster',
-            oid: '16506',
-        });
+        try {
+            await logRepository.createLog({
+                row_pk_id: id,
+                uid: request?.user?.id,
+                action: 'UPDATE',
+                client_addr: request?.ip,
+                application_name: 'Оновлення даних дитини',
+                action_stamp_tx: new Date(),
+                action_stamp_stm: new Date(),
+                action_stamp_clk: new Date(),
+                schema_name: 'ower',
+                table_name: 'children_roster',
+                oid: '16506',
+            });
+        } catch (logError) {
+            console.error('[updateChild] Logging error:', logError.message);
+        }
 
         return result;
     }
@@ -368,19 +397,23 @@ class KindergartenService {
         const result = await KindergartenRepository.deleteChild(id);
 
         // Логування видалення
-        await logRepository.createLog({
-            row_pk_id: id,
-            uid: request?.user?.id,
-            action: 'DELETE',
-            client_addr: request?.ip,
-            application_name: 'Видалення дитини',
-            action_stamp_tx: new Date(),
-            action_stamp_stm: new Date(),
-            action_stamp_clk: new Date(),
-            schema_name: 'ower',
-            table_name: 'children_roster',
-            oid: '16506',
-        });
+        try {
+            await logRepository.createLog({
+                row_pk_id: id,
+                uid: request?.user?.id,
+                action: 'DELETE',
+                client_addr: request?.ip,
+                application_name: 'Видалення дитини з садочка',
+                action_stamp_tx: new Date(),
+                action_stamp_stm: new Date(),
+                action_stamp_clk: new Date(),
+                schema_name: 'ower',
+                table_name: 'children_roster',
+                oid: '16506',
+            });
+        } catch (logError) {
+            console.error('[deleteChild] Logging error:', logError.message);
+        }
 
         return result;
     }
@@ -1259,42 +1292,84 @@ class KindergartenService {
     // ===============================
 
     async verifyEducator(request) {
-        const { phone_number } = request.body;
+        try {
+            let { phone_number } = request.body;
 
-        if (!phone_number) {
-            throw new Error('Номер телефону обов\'язковий');
+            // ПЕРЕВІРКА 1: Номер телефону обов'язковий
+            if (!phone_number) {
+                throw new Error('Номер телефону обов\'язковий');
+            }
+
+            console.log('[verifyEducator] Original phone:', phone_number);
+
+            // НОРМАЛІЗАЦІЯ НОМЕРА: видаляємо пробіли, дужки, дефіси
+            phone_number = phone_number.replace(/[\s\-\(\)]/g, '');
+            
+            // Якщо номер починається з 0, додаємо +38
+            if (phone_number.startsWith('0')) {
+                phone_number = '+38' + phone_number;
+            }
+            
+            // Якщо немає +, додаємо +
+            if (!phone_number.startsWith('+')) {
+                phone_number = '+' + phone_number;
+            }
+
+            console.log('[verifyEducator] Normalized phone:', phone_number);
+
+            // ЗАПИТ ДО БАЗИ ДАНИХ
+            let educator;
+            try {
+                educator = await KindergartenRepository.verifyEducator(phone_number);
+                console.log('[verifyEducator] Database result:', educator);
+            } catch (dbError) {
+                console.error('[verifyEducator] Database error:', dbError);
+                throw new Error(`Помилка запиту до бази даних: ${dbError.message}`);
+            }
+
+            // ЛОГУВАННЯ (з обробкою помилок)
+            if (request?.user?.id) {
+                try {
+                    await logRepository.createLog({
+                        row_pk_id: educator && educator.length > 0 ? educator[0].id : null,
+                        uid: request.user.id,
+                        action: 'VIEW',
+                        client_addr: request?.ip,
+                        application_name: 'Перевірка вихователя (мобільний додаток)',
+                        action_stamp_tx: new Date(),
+                        action_stamp_stm: new Date(),
+                        action_stamp_clk: new Date(),
+                        schema_name: 'ower',
+                        table_name: 'kindergarten_admins',
+                        oid: '16510',
+                    });
+                } catch (logError) {
+                    // Логування не критично - просто виводимо в консоль
+                    console.error('[verifyEducator] Logging error (non-critical):', logError.message);
+                }
+            } else {
+                console.warn('[verifyEducator] request.user.id not found - logging skipped');
+            }
+
+            // ПОВЕРТАЄМО РЕЗУЛЬТАТ
+            const result = {
+                isEducator: educator && educator.length > 0,
+                educatorInfo: educator && educator.length > 0 ? {
+                    id: educator[0].id,
+                    phone_number: educator[0].phone_number,
+                    full_name: educator[0].full_name,
+                    kindergarten_name: educator[0].kindergarten_name
+                } : null
+            };
+
+            console.log('[verifyEducator] Final result:', result);
+            
+            return result;
+
+        } catch (error) {
+            console.error('[verifyEducator] Fatal error:', error);
+            throw error; // Передаємо помилку далі в controller
         }
-
-        // Перевіряємо чи існує вихователь з таким номером
-        const educator = await KindergartenRepository.verifyEducator(phone_number);
-
-        // Логування
-        if (request?.user?.id) {
-            await logRepository.createLog({
-                row_pk_id: educator && educator.length > 0 ? educator[0].id : null,
-                uid: request.user.id,
-                action: 'VIEW',
-                client_addr: request?.ip,
-                application_name: 'Перевірка вихователя (мобільний додаток)',
-                action_stamp_tx: new Date(),
-                action_stamp_stm: new Date(),
-                action_stamp_clk: new Date(),
-                schema_name: 'ower',
-                table_name: 'kindergarten_admins',
-                oid: '16510',
-            });
-        }
-
-        // Повертаємо результат перевірки
-        return {
-            isEducator: educator && educator.length > 0,
-            educatorInfo: educator && educator.length > 0 ? {
-                id: educator[0].id,
-                full_name: educator[0].full_name,
-                kindergarten_name: educator[0].kindergarten_name,
-                phone_number: educator[0].phone_number
-            } : null
-        };
     }
 }
 
