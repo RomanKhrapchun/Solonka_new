@@ -40,11 +40,6 @@ const kindergartenGroupFilterSchema = {
 
 const kindergartenGroupCreateSchema = {
     body: {
-        kindergarten_name: {
-            type: 'string',
-            min: 1,
-            max: 100,
-        },
         group_name: {
             type: 'string',
             min: 1,
@@ -65,12 +60,6 @@ const kindergartenGroupUpdateSchema = {
         }
     },
     body: {
-        kindergarten_name: {
-            type: 'string',
-            min: 1,
-            max: 100,
-            optional: true,
-        },
         group_name: {
             type: 'string',
             min: 1,
@@ -379,11 +368,25 @@ const saveMobileAttendanceSchema = {
             type: 'number',
             positive: true,
         },
-        children: {
+        groups: {
             type: 'array',
             items: {
-                type: 'number',
-                positive: true,
+                type: 'object',
+                props: {
+                    id: { type: 'number', positive: true },
+                    name: { type: 'string', optional: true },
+                    group: {
+                        type: 'array',
+                        items: {
+                            type: 'object',
+                            props: {
+                                id: { type: 'number', positive: true },
+                                name: { type: 'string', optional: true },
+                                selected: { type: 'boolean' }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -752,6 +755,67 @@ const verifyEducatorSchema = {
     }
 };
 
+
+// Middleware для валідації формату мобільної відвідуваності
+const validateMobileAttendanceFormat = async (request, reply) => {
+    const { date, groups } = request.body;
+
+    if (!date || typeof date !== 'number') {
+        return reply.code(400).send({
+            error: true,
+            message: 'Поле "date" обов\'язкове і має бути числом'
+        });
+    }
+
+    if (!Array.isArray(groups)) {
+        return reply.code(400).send({
+            error: true,
+            message: 'Поле "groups" має бути масивом'
+        });
+    }
+
+    if (groups.length === 0) {
+        return reply.code(400).send({
+            error: true,
+            message: 'Масив "groups" не може бути порожнім'
+        });
+    }
+
+    // Валідація структури groups
+    for (const group of groups) {
+        if (!group.id || typeof group.id !== 'number') {
+            return reply.code(400).send({
+                error: true,
+                message: 'Кожна група має мати поле "id" типу number'
+            });
+        }
+
+        if (!Array.isArray(group.group)) {
+            return reply.code(400).send({
+                error: true,
+                message: 'Кожна група має мати масив "group" з дітьми'
+            });
+        }
+
+        // Валідація дітей у групі
+        for (const child of group.group) {
+            if (!child.id || typeof child.id !== 'number') {
+                return reply.code(400).send({
+                    error: true,
+                    message: 'Кожна дитина має мати поле "id" типу number'
+                });
+            }
+
+            if (typeof child.selected !== 'boolean') {
+                return reply.code(400).send({
+                    error: true,
+                    message: 'Кожна дитина має мати поле "selected" типу boolean'
+                });
+            }
+        }
+    }
+};
+
 module.exports = {
     // Групи
     kindergartenGroupFilterSchema,
@@ -797,4 +861,5 @@ module.exports = {
     adminsDeleteSchema,
     adminsInfoSchema,
     verifyEducatorSchema,
+    validateMobileAttendanceFormat,
 };

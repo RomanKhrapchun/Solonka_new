@@ -117,7 +117,6 @@ const KindergartenGroups = () => {
         isOpen: false,
         loading: false,
         formData: {
-            kindergarten_name: '',
             group_name: '',
             group_type: ''
         }
@@ -129,7 +128,7 @@ const KindergartenGroups = () => {
         loading: false,
         groupId: null,
         formData: {
-            kindergarten_name: '',
+            
             group_name: '',
             group_type: ''
         }
@@ -219,7 +218,6 @@ const KindergartenGroups = () => {
 
     const columnTable = useMemo(() => {
         let columns = [
-            createSortableColumn('Назва садочка', 'kindergarten_name', null, '200px'),
             createSortableColumn('Назва групи', 'group_name', null, '150px'),
             createSortableColumn('Тип групи', 'group_type', (value) => {
                 const typeLabels = {
@@ -264,7 +262,6 @@ const KindergartenGroups = () => {
             return data.items.map((el) => ({
                 key: el.id,
                 id: el.id,
-                kindergarten_name: el.kindergarten_name,
                 group_name: el.group_name,
                 group_type: el.group_type,
             }));
@@ -420,7 +417,7 @@ const KindergartenGroups = () => {
             ...prev,
             isOpen: true,
             formData: {
-                kindergarten_name: '',
+                
                 group_name: '',
                 group_type: ''
             }
@@ -505,7 +502,7 @@ const KindergartenGroups = () => {
             loading: false,
             groupId: record.id,
             formData: {
-                kindergarten_name: record.kindergarten_name,
+                
                 group_name: record.group_name,
                 group_type: record.group_type
             }
@@ -715,19 +712,9 @@ const KindergartenGroups = () => {
                         confirmLoading={modalState.loading}
                         cancelText="Відхилити"
                         okText="Зберегти"
-                        title="Додати нову групу садочка"
+                        title="Додати нову групу"
                     >
                         <div className="modal-form">
-                            <div className="form-group">
-                                <Input
-                                    label="Назва садочка"
-                                    placeholder="Введіть назву садочка"
-                                    name="kindergarten_name"
-                                    value={modalState.formData.kindergarten_name}
-                                    onChange={handleModalInputChange}
-                                    required
-                                />
-                            </div>
                             
                             <div className="form-group">
                                 <Input
@@ -776,19 +763,9 @@ const KindergartenGroups = () => {
                         confirmLoading={editModalState.loading}
                         cancelText="Відхилити"
                         okText="Зберегти"
-                        title="Редагувати групу садочка"
+                        title="Редагувати групу"
                     >
                         <div className="modal-form">
-                            <div className="form-group">
-                                <Input
-                                    label="Назва садочка"
-                                    placeholder="Введіть назву садочка"
-                                    name="kindergarten_name"
-                                    value={editModalState.formData.kindergarten_name}
-                                    onChange={handleEditInputChange}
-                                    required
-                                />
-                            </div>
                             
                             <div className="form-group">
                                 <Input

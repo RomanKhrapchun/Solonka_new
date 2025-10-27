@@ -36,7 +36,7 @@ class KindergartenService {
             limit = 16, 
             sort_by = 'id', 
             sort_direction = 'desc',
-            kindergarten_name,
+            
             group_name,
             group_type,
             ...whereConditions 
@@ -44,7 +44,7 @@ class KindergartenService {
 
         const { offset } = paginate(page, limit);
         
-        if (kindergarten_name || group_name || group_type) {
+        if (group_name || group_type) {
             await logRepository.createLog({
                 row_pk_id: null,
                 uid: request?.user?.id,
@@ -65,7 +65,7 @@ class KindergartenService {
             offset,
             sort_by,
             sort_direction,
-            kindergarten_name,
+            
             group_name,
             group_type,
             ...whereConditions
@@ -76,22 +76,14 @@ class KindergartenService {
 
     async createGroup(request) {
         const {
-            kindergarten_name,
+            
             group_name,
             group_type
         } = request.body;
 
-        const existingGroup = await KindergartenRepository.getGroupByNameAndKindergarten(
-            kindergarten_name,
-            group_name
-        );
-
-        if (existingGroup && existingGroup.length > 0) {
-            throw new Error('Група з такою назвою вже існує в цьому садочку');
-        }
 
         const groupData = {
-            kindergarten_name,
+            
             group_name,
             group_type,
             created_at: new Date()
@@ -125,17 +117,6 @@ class KindergartenService {
             throw new Error('Групу не знайдено');
         }
 
-        if (updateData.kindergarten_name && updateData.group_name) {
-            const duplicateGroup = await KindergartenRepository.getGroupByNameAndKindergarten(
-                updateData.kindergarten_name,
-                updateData.group_name,
-                id
-            );
-
-            if (duplicateGroup && duplicateGroup.length > 0) {
-                throw new Error('Група з такою назвою вже існує в цьому садочку');
-            }
-        }
 
         const result = await KindergartenRepository.updateGroup(id, updateData);
 
@@ -245,14 +226,14 @@ class KindergartenService {
             child_name,
             parent_name,
             phone_number,
-            kindergarten_name,
+            
             group_id
         } = request.body;
 
         const existingChild = await KindergartenRepository.getChildByNameAndParent(
             child_name,
             parent_name,
-            kindergarten_name
+            
         );
 
         if (existingChild && existingChild.length > 0) {
@@ -270,7 +251,7 @@ class KindergartenService {
             child_name,
             parent_name,
             phone_number,
-            kindergarten_name,
+            
             group_id,
             created_at: new Date()
         };
@@ -310,11 +291,11 @@ class KindergartenService {
             }
         }
 
-        if (updateData.child_name && updateData.parent_name && updateData.kindergarten_name) {
+        if (updateData.child_name && updateData.parent_name) {
             const duplicateChild = await KindergartenRepository.getChildByNameAndParent(
                 updateData.child_name,
                 updateData.parent_name,
-                updateData.kindergarten_name,
+                
                 id
             );
 

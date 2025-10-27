@@ -77,7 +77,7 @@ class KindergartenRepository {
             offset,
             sort_by = 'id',
             sort_direction = 'desc',
-            kindergarten_name,
+            
             group_name,
             group_type
         } = options;
@@ -100,10 +100,6 @@ class KindergartenRepository {
         `;
 
         // Додаємо фільтри
-        if (kindergarten_name) {
-            sql += ` AND kg.kindergarten_name ILIKE ?`;
-            values.push(`%${kindergarten_name}%`);
-        }
 
         if (group_name) {
             sql += ` AND kg.group_name ILIKE ?`;
@@ -116,7 +112,7 @@ class KindergartenRepository {
         }
 
         // Додаємо сортування
-        const allowedSortFields = ['id', 'kindergarten_name', 'group_name', 'group_type', 'created_at'];
+        const allowedSortFields = ['id', 'group_name', 'group_type', 'created_at'];
         const validSortBy = allowedSortFields.includes(sort_by) ? sort_by : 'id';
         const validSortDirection = ['asc', 'desc'].includes(sort_direction.toLowerCase()) ? sort_direction.toUpperCase() : 'DESC';
         
@@ -149,7 +145,7 @@ class KindergartenRepository {
 
     async createGroup(groupData) {
         const {
-            kindergarten_name,
+            
             group_name,
             group_type,
             created_at
@@ -157,13 +153,13 @@ class KindergartenRepository {
 
         const sql = `
             INSERT INTO ower.kindergarten_groups 
-            (kindergarten_name, group_name, group_type, created_at)
-            VALUES (?, ?, ?, ?)
-            RETURNING id, kindergarten_name, group_name, group_type, created_at
+            (group_name, group_type, created_at)
+            VALUES (?, ?, ?)
+            RETURNING id, group_name, group_type, created_at
         `;
 
         const values = [
-            kindergarten_name,
+            
             group_name,
             group_type,
             created_at
@@ -232,7 +228,7 @@ class KindergartenRepository {
                     'child_name', cr.child_name,
                     'parent_name', cr.parent_name,
                     'phone_number', cr.phone_number,
-                    'kindergarten_name', cr.kindergarten_name,
+                    'kindergarten_name', kg.kindergarten_name,
                     'group_id', cr.group_id,
                     'created_at', cr.created_at,
                     'group_name', kg.group_name
@@ -260,7 +256,7 @@ class KindergartenRepository {
         }
 
         if (kindergarten_name) {
-            sql += ` AND cr.kindergarten_name ILIKE ?`;
+            sql += ` AND kg.kindergarten_name ILIKE ?`;
             values.push(`%${kindergarten_name}%`);
         }
 
@@ -291,7 +287,7 @@ class KindergartenRepository {
                 cr.child_name,
                 cr.parent_name,
                 cr.phone_number,
-                cr.kindergarten_name,
+                kg.kindergarten_name,
                 cr.group_id,
                 cr.created_at,
                 kg.group_name
@@ -318,13 +314,13 @@ class KindergartenRepository {
         return await sqlRequest(sql, values);
     }
 
-    async getChildByNameAndParent(childName, parentName, kindergartenName, excludeId = null) {
+    async getChildByNameAndParent(childName, parentName, excludeId = null) {
         let sql = `
-            SELECT id, child_name, parent_name, kindergarten_name
+            SELECT id, child_name, parent_name
             FROM ower.children_roster
-            WHERE child_name = ? AND parent_name = ? AND kindergarten_name = ?
+            WHERE child_name = ? AND parent_name = ?
         `;
-        const values = [childName, parentName, kindergartenName];
+        const values = [childName, parentName];
 
         if (excludeId) {
             sql += ` AND id != ?`;
@@ -339,23 +335,21 @@ class KindergartenRepository {
             child_name,
             parent_name,
             phone_number,
-            kindergarten_name,
             group_id,
             created_at
         } = childData;
 
         const sql = `
             INSERT INTO ower.children_roster
-            (child_name, parent_name, phone_number, kindergarten_name, group_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            RETURNING id, child_name, parent_name, phone_number, kindergarten_name, group_id, created_at
+            (child_name, parent_name, phone_number, group_id, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            RETURNING id, child_name, parent_name, phone_number, group_id, created_at
         `;
 
         const values = [
             child_name,
             parent_name,
             phone_number || null,
-            kindergarten_name,
             group_id,
             created_at
         ];
@@ -371,7 +365,7 @@ class KindergartenRepository {
             UPDATE ower.children_roster
             SET ${fields}
             WHERE id = ?
-            RETURNING id, child_name, parent_name, phone_number, kindergarten_name, group_id, created_at
+            RETURNING id, child_name, parent_name, phone_number, group_id, created_at
         `;
         
         return await sqlRequest(sql, values);

@@ -185,7 +185,7 @@ const ChildrenRoster = () => {
                 if (response?.data && Array.isArray(response.data.items)) {
                     const groupOptions = response.data.items.map(group => ({
                         value: group.id,
-                        label: `${group.kindergarten_name} - ${group.group_name}`
+                        label: group.group_name
                     }));
                     setGroupsData(groupOptions);
                     console.log('Groups loaded successfully:', groupOptions);
@@ -260,7 +260,7 @@ const ChildrenRoster = () => {
             createSortableColumn('ПІБ батьків', 'parent_name', null, '200px'),
             createSortableColumn('Контактний номер', 'phone_number', null, '150px'),
             createSortableColumn('Група', 'group_name', (value, record) => {
-                return `${record.kindergarten_name} - ${value}`;
+                return value;
             }, '250px'),
             {
                 title: 'Дія',
