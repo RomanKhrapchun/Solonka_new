@@ -36,6 +36,7 @@ const {
     adminsUpdateSchema,
     adminsDeleteSchema,
     verifyEducatorSchema,
+    validateMobileAttendanceFormat,
 } = require('../schema/kindergarten-schema');
 
 const routes = async (fastify) => {
@@ -196,10 +197,13 @@ const routes = async (fastify) => {
         preParsing: RouterGuard()  // Мінімальна авторизація без перевірки прав
     }, kindergartenController.getMobileAttendance);
 
-    fastify.post("/attendance/mobile", { 
-        schema: mobileAttendanceSaveSchema,
-        preParsing: RouterGuard()  // Мінімальна авторизація без перевірки прав
-    }, kindergartenController.saveMobileAttendance);
+fastify.post("/attendance/mobile", { 
+    schema: mobileAttendanceSaveSchema,
+    preHandler: [
+        RouterGuard(),
+        validateMobileAttendanceFormat
+    ]
+}, kindergartenController.saveMobileAttendance);
 
     // ===============================
     // РОУТИ ДЛЯ АДМІНІСТРАТОРІВ САДОЧКУ

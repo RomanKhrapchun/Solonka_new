@@ -954,7 +954,7 @@ class KindergartenService {
     
     // ✅ ВИПРАВЛЕНИЙ МЕТОД З TOGGLE ЛОГІКОЮ
     async saveMobileAttendance(request) {
-        const { date, children } = request.body;  // ✅ НОВИЙ ФОРМАТ - масив ID дітей
+        const { date, children, groups } = request.body;
         
         // Конвертуємо timestamp в дату
         const dateString = new Date(date * 1000).toISOString().split('T')[0];
@@ -962,50 +962,170 @@ class KindergartenService {
         const results = [];
         const errors = [];
         
-        // Проходимо по всіх дітях на яких НАТИСНУЛИ в мобільному
-        for (const childId of children) {
+        // ✅ Визначаємо який формат використовується
+        let childrenToProcess = [];
+        
+        if (children) {
+            // =============================
+            // НОВИЙ ФОРМАТ: { children: [5, 6, 8] }
+            // =============================
+            childrenToProcess = children.map(id => ({ id, groupId: null }));
+            
+        } else if (groups) {
+            // =============================
+            // СТАРИЙ ФОРМАТ: { groups: [{id: 2, group: [{id: 5, selected: true}]}] }
+            // =============================
+            
+            // Спочатку перевіряємо чи всі групи існують
+            for (const group of groups) {
+                try {
+                    const existingGroup = await KindergartenRepository.getGroupById(group.id);
+                    if (!existingGroup || existingGroup.length === 0) {
+                        errors.push({
+                            group_id: group.id,
+                            error: `Групу з ID ${group.id} не знайдено`
+                        });
+                        continue; // Пропускаємо цю групу якщо вона не існує
+                    }
+                    
+                    // Додаємо дітей з цієї групи до списку для обробки
+                    for (const child of group.group) {
+                        childrenToProcess.push({
+                            id: child.id,
+                            groupId: group.id,
+                            selected: child.selected
+                        });
+                    }
+                } catch (error) {
+                    errors.push({
+                        group_id: group.id,
+                        error: error.message
+                    });
+                }
+            }
+        }
+        
+        // ✅ Обробляємо кожну дитину
+        for (const child of childrenToProcess) {
             try {
-                // Перевіряємо чи існує запис відвідуваності на цю дату для цієї дитини
+                // Перевіряємо чи дитина існує
+                const existingChild = await KindergartenRepository.getChildById(child.id);
+                if (!existingChild || existingChild.length === 0) {
+                    errors.push({
+                        child_id: child.id,
+                        error: `Дитину з ID ${child.id} не знайдено`
+                    });
+                    continue;
+                }
+                
+                // ✅ ВАЖЛИВА ПЕРЕВІРКА: Чи належить дитина до вказаної групи?
+                if (child.groupId !== null) {
+                    const childData = existingChild[0];
+                    if (childData.group_id !== child.groupId) {
+                        errors.push({
+                            child_id: child.id,
+                            group_id: child.groupId,
+                            error: `Дитина ${child.id} не належить до групи ${child.groupId}. Фактична група: ${childData.group_id}`
+                        });
+                        continue; // Пропускаємо цю дитину
+                    }
+                }
+                
+                // Перевіряємо чи існує запис відвідуваності
                 const existingAttendance = await KindergartenRepository.getAttendanceByDateAndChild(
                     dateString, 
-                    childId
+                    child.id
                 );
                 
-                if (existingAttendance && existingAttendance.length > 0) {
-                    // ✅ TOGGLE - перемикаємо статус на протилежний
-                    const currentStatus = existingAttendance[0].attendance_status;
-                    const newStatus = currentStatus === 'present' ? 'absent' : 'present';
+                if (children) {
+                    // =============================
+                    // ЛОГІКА ДЛЯ НОВОГО ФОРМАТУ: TOGGLE
+                    // =============================
+                    if (existingAttendance && existingAttendance.length > 0) {
+                        // Є запис - перемикаємо статус
+                        const currentStatus = existingAttendance[0].attendance_status;
+                        const newStatus = currentStatus === 'present' ? 'absent' : 'present';
+                        
+                        await KindergartenRepository.updateAttendance(
+                            existingAttendance[0].id,
+                            { attendance_status: newStatus }
+                        );
+                        
+                        results.push({
+                            child_id: child.id,
+                            action: 'toggled',
+                            old_status: currentStatus,
+                            new_status: newStatus
+                        });
+                    } else {
+                        // Немає запису - створюємо з present
+                        await KindergartenRepository.createAttendance({
+                            date: dateString,
+                            child_id: child.id,
+                            attendance_status: 'present',
+                            notes: null,
+                            created_at: new Date()
+                        });
+                        
+                        results.push({
+                            child_id: child.id,
+                            action: 'created',
+                            new_status: 'present'
+                        });
+                    }
+                } else if (groups) {
+                    // =============================
+                    // ЛОГІКА ДЛЯ СТАРОГО ФОРМАТУ: SET STATUS
+                    // =============================
+                    const targetStatus = child.selected ? 'present' : 'absent';
                     
-                    await KindergartenRepository.updateAttendance(
-                        existingAttendance[0].id,
-                        { attendance_status: newStatus }
-                    );
-                    
-                    results.push({
-                        child_id: childId,
-                        action: 'toggled',
-                        old_status: currentStatus,
-                        new_status: newStatus
-                    });
-                } else {
-                    // Немає запису - створюємо з present (якщо натиснув значить прийшов)
-                    await KindergartenRepository.createAttendance({
-                        date: dateString,
-                        child_id: childId,
-                        attendance_status: 'present',
-                        notes: null,
-                        created_at: new Date()
-                    });
-                    
-                    results.push({
-                        child_id: childId,
-                        action: 'created',
-                        new_status: 'present'
-                    });
+                    if (existingAttendance && existingAttendance.length > 0) {
+                        // Є запис - оновлюємо якщо статус змінився
+                        const currentStatus = existingAttendance[0].attendance_status;
+                        
+                        if (currentStatus !== targetStatus) {
+                            await KindergartenRepository.updateAttendance(
+                                existingAttendance[0].id,
+                                { attendance_status: targetStatus }
+                            );
+                            
+                            results.push({
+                                child_id: child.id,
+                                group_id: child.groupId,
+                                action: 'updated',
+                                old_status: currentStatus,
+                                new_status: targetStatus
+                            });
+                        } else {
+                            results.push({
+                                child_id: child.id,
+                                group_id: child.groupId,
+                                action: 'unchanged',
+                                status: targetStatus
+                            });
+                        }
+                    } else {
+                        // Немає запису - створюємо
+                        await KindergartenRepository.createAttendance({
+                            date: dateString,
+                            child_id: child.id,
+                            attendance_status: targetStatus,
+                            notes: null,
+                            created_at: new Date()
+                        });
+                        
+                        results.push({
+                            child_id: child.id,
+                            group_id: child.groupId,
+                            action: 'created',
+                            new_status: targetStatus
+                        });
+                    }
                 }
             } catch (error) {
                 errors.push({
-                    child_id: childId,
+                    child_id: child.id,
+                    group_id: child.groupId,
                     error: error.message
                 });
             }
@@ -1018,7 +1138,9 @@ class KindergartenService {
                 uid: request.user.id,
                 action: 'UPDATE',
                 client_addr: request?.ip,
-                application_name: 'Мобільний додаток - збереження відвідуваності (toggle)',
+                application_name: children 
+                    ? 'Мобільний додаток - збереження відвідуваності (toggle формат)'
+                    : 'Мобільний додаток - збереження відвідуваності (groups формат)',
                 action_stamp_tx: new Date(),
                 action_stamp_stm: new Date(),
                 action_stamp_clk: new Date(),
@@ -1031,9 +1153,10 @@ class KindergartenService {
         return {
             success: results.length,
             errors: errors.length,
+            format: children ? 'children' : 'groups',
             details: {
                 results,
-                errors
+                errors: errors.length > 0 ? errors : undefined
             }
         };
     }

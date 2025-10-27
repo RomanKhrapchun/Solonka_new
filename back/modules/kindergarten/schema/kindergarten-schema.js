@@ -1,26 +1,3 @@
-// Основні схеми для садочків
-const kindergartenFilterSchema = {
-    body: {
-        page: {
-            type: 'number',
-            optional: true,
-        },
-        limit: {
-            type: 'number',
-            optional: true,
-        },
-    }
-};
-
-const kindergartenInfoSchema = {
-    params: {
-        id: {
-            type: 'string',
-            numeric: true,
-        },
-    }
-};
-
 // ===============================
 // СХЕМИ ДЛЯ ГРУП САДОЧКА
 // ===============================
@@ -117,6 +94,15 @@ const kindergartenGroupDeleteSchema = {
     }
 };
 
+const kindergartenGroupInfoSchema = {
+    params: {
+        id: {
+            type: 'string',
+            numeric: true,
+        }
+    }
+};
+
 // ===============================
 // СХЕМИ ДЛЯ ДІТЕЙ САДОЧКА
 // ===============================
@@ -143,7 +129,7 @@ const childrenFilterSchema = {
         sort_by: {
             type: 'string',
             optional: true,
-            enum: ['id', 'child_name', 'parent_name', 'kindergarten_name', 'created_at']
+            enum: ['id', 'child_name', 'parent_name', 'created_at']
         },
         sort_direction: {
             type: 'string',
@@ -161,11 +147,6 @@ const childrenFilterSchema = {
             min: 1
         },
         phone_number: {
-            type: 'string',
-            optional: true,
-            min: 1
-        },
-        kindergarten_name: {
             type: 'string',
             optional: true,
             min: 1
@@ -196,12 +177,6 @@ const childrenCreateSchema = {
             min: 10,
             max: 20,
             optional: true
-        },
-        kindergarten_name: {
-            type: 'string',
-            min: 1,
-            max: 100,
-            trim: true
         },
         group_id: {
             type: 'number',
@@ -236,13 +211,6 @@ const childrenUpdateSchema = {
             type: 'string',
             min: 10,
             max: 20,
-            optional: true
-        },
-        kindergarten_name: {
-            type: 'string',
-            min: 1,
-            max: 100,
-            trim: true,
             optional: true
         },
         group_id: {
@@ -362,7 +330,7 @@ const attendanceUpdateSchema = {
         id: {
             type: 'string',
             numeric: true,
-        }
+        },
     },
     body: {
         date: {
@@ -397,18 +365,51 @@ const attendanceDeleteSchema = {
     }
 };
 
+const attendanceByDateSchema = {
+    params: {
+        date: {
+            type: 'string',
+        }
+    }
+};
+
+const saveMobileAttendanceSchema = {
+    body: {
+        date: {
+            type: 'number',
+            positive: true,
+        },
+        children: {
+            type: 'array',
+            items: {
+                type: 'number',
+                positive: true,
+            }
+        }
+    }
+};
+
 // ===============================
 // СХЕМИ ДЛЯ ВАРТОСТІ ХАРЧУВАННЯ
 // ===============================
 
-const dailyFoodCostFilterSchema = {
+const foodCostInfoSchema = {
+    params: {
+        id: {
+            type: 'string',
+            numeric: true,
+        },
+    }
+};
+
+const foodCostFilterSchema = {
     body: {
         page: {
             type: 'number',
             optional: true,
         },
         limit: {
-            type: 'number', 
+            type: 'number',
             optional: true,
         },
         sort_by: {
@@ -418,6 +419,11 @@ const dailyFoodCostFilterSchema = {
         sort_direction: {
             type: 'string',
             optional: true,
+        },
+        date: {
+            type: 'string',
+            optional: true,
+            format: 'date',
         },
         date_from: {
             type: 'string',
@@ -429,39 +435,36 @@ const dailyFoodCostFilterSchema = {
             optional: true,
             format: 'date',
         },
+        food_cost_min: {
+            type: 'number',
+            optional: true,
+        },
+        food_cost_max: {
+            type: 'number',
+            optional: true,
+        },
     }
 };
 
-const dailyFoodCostCreateSchema = {
+const foodCostCreateSchema = {
     body: {
         date: {
             type: 'string',
             format: 'date',
         },
-        young_group_cost: {
+        food_cost: {
             type: 'number',
-            minimum: 0,
-            maximum: 9999.99,
-        },
-        older_group_cost: {
-            type: 'number',
-            minimum: 0,
-            maximum: 9999.99,
-        },
-        notes: {
-            type: 'string',
-            optional: true,
-            max: 500,
+            positive: true,
         },
     }
 };
 
-const dailyFoodCostUpdateSchema = {
+const foodCostUpdateSchema = {
     params: {
         id: {
             type: 'string',
             numeric: true,
-        }
+        },
     },
     body: {
         date: {
@@ -469,27 +472,15 @@ const dailyFoodCostUpdateSchema = {
             format: 'date',
             optional: true,
         },
-        young_group_cost: {
+        food_cost: {
             type: 'number',
-            minimum: 0,
-            maximum: 9999.99,
+            positive: true,
             optional: true,
-        },
-        older_group_cost: {
-            type: 'number',
-            minimum: 0,
-            maximum: 9999.99,
-            optional: true,
-        },
-        notes: {
-            type: 'string',
-            optional: true,
-            max: 500,
         },
     }
 };
 
-const dailyFoodCostDeleteSchema = {
+const foodCostDeleteSchema = {
     params: {
         id: {
             type: 'string',
@@ -529,20 +520,18 @@ const billingFilterSchema = {
             type: 'string',
             optional: true,
         },
-        parent_name: {
-            type: 'string',
-            optional: true,
-            min: 1,
-        },
         payment_month_from: {
             type: 'string',
             optional: true,
-            format: 'date',
         },
         payment_month_to: {
             type: 'string',
             optional: true,
-            format: 'date',
+        },
+        parent_name: {
+            type: 'string',
+            optional: true,
+            min: 1,
         },
         balance_min: {
             type: 'number',
@@ -564,24 +553,17 @@ const billingCreateSchema = {
         },
         payment_month: {
             type: 'string',
-            format: 'date',
         },
         current_debt: {
             type: 'number',
-            minimum: 0,
-            maximum: 999999.99,
             optional: true,
         },
         current_accrual: {
             type: 'number',
-            minimum: 0,
-            maximum: 999999.99,
             optional: true,
         },
         current_payment: {
             type: 'number',
-            minimum: 0,
-            maximum: 999999.99,
             optional: true,
         },
         notes: {
@@ -597,7 +579,7 @@ const billingUpdateSchema = {
         id: {
             type: 'string',
             numeric: true,
-        }
+        },
     },
     body: {
         parent_name: {
@@ -608,25 +590,18 @@ const billingUpdateSchema = {
         },
         payment_month: {
             type: 'string',
-            format: 'date',
             optional: true,
         },
         current_debt: {
             type: 'number',
-            minimum: 0,
-            maximum: 999999.99,
             optional: true,
         },
         current_accrual: {
             type: 'number',
-            minimum: 0,
-            maximum: 999999.99,
             optional: true,
         },
         current_payment: {
             type: 'number',
-            minimum: 0,
-            maximum: 999999.99,
             optional: true,
         },
         notes: {
@@ -647,52 +622,8 @@ const billingDeleteSchema = {
 };
 
 // ===============================
-// ✅ СХЕМИ ДЛЯ МОБІЛЬНОГО ДОДАТКУ (ВИПРАВЛЕНО)
+// СХЕМИ ДЛЯ АДМІНІСТРАТОРІВ
 // ===============================
-
-const mobileAttendanceGetSchema = {
-    params: {
-        date: {
-            type: 'string',
-            pattern: '^[0-9]{10}$', // Unix timestamp (10 цифр)
-        }
-    }
-};
-
-// ✅ ВИПРАВЛЕНА СХЕМА - НОВА TOGGLE ЛОГІКА
-const mobileAttendanceSaveSchema = {
-    body: {
-        date: {
-            type: 'number',
-            minimum: 1000000000, // мінімальний timestamp (10 цифр)
-            maximum: 9999999999, // максимальний timestamp (10 цифр)
-            description: 'Unix timestamp (секунди)'
-        },
-        children: {
-            type: 'array',
-            min: 1, // мінімум 1 дитина
-            items: {
-                type: 'number',
-                minimum: 1,
-                description: 'ID дитини'
-            },
-            description: 'Масив ID дітей на яких натиснули (toggle)'
-        }
-    }
-};
-
-// ===============================
-// СХЕМИ ДЛЯ АДМІНІСТРАТОРІВ САДОЧКА
-// ===============================
-
-const adminsInfoSchema = {
-    params: {
-        id: {
-            type: 'string',
-            numeric: true,
-        },
-    }
-};
 
 const adminsFilterSchema = {
     body: {
@@ -714,8 +645,8 @@ const adminsFilterSchema = {
         },
         phone_number: {
             type: 'string',
-            optional: true,
             pattern: '^\\+?[0-9\\s\\-\\(\\)]{10,20}$',
+            optional: true,
         },
         full_name: {
             type: 'string',
@@ -803,6 +734,15 @@ const adminsDeleteSchema = {
     }
 };
 
+const adminsInfoSchema = {
+    params: {
+        id: {
+            type: 'string',
+            numeric: true,
+        }
+    }
+};
+
 const verifyEducatorSchema = {
     body: {
         phone_number: {
@@ -813,54 +753,48 @@ const verifyEducatorSchema = {
 };
 
 module.exports = {
-    // Основні схеми садочка
-    kindergartenFilterSchema,
-    kindergartenInfoSchema,
-    
-    // Схеми для груп
+    // Групи
     kindergartenGroupFilterSchema,
     kindergartenGroupCreateSchema,
     kindergartenGroupUpdateSchema,
     kindergartenGroupDeleteSchema,
+    kindergartenGroupInfoSchema,
     
-    // Схеми для дітей
+    // Діти
     childrenFilterSchema,
-    childrenInfoSchema,
     childrenCreateSchema,
     childrenUpdateSchema,
     childrenDeleteSchema,
-
-    // Схеми для відвідуваності
+    childrenInfoSchema,
+    
+    // Відвідуваність
     attendanceFilterSchema,
-    attendanceInfoSchema,
     attendanceCreateSchema,
     attendanceUpdateSchema,
     attendanceDeleteSchema,
-
-    // Схеми для вартості харчування
-    dailyFoodCostFilterSchema,
-    dailyFoodCostCreateSchema,
-    dailyFoodCostUpdateSchema,
-    dailyFoodCostDeleteSchema,
-
-    // Схеми для батьківської плати
+    attendanceInfoSchema,
+    attendanceByDateSchema,
+    saveMobileAttendanceSchema,
+    
+    // Вартість харчування
+    foodCostFilterSchema,
+    foodCostCreateSchema,
+    foodCostUpdateSchema,
+    foodCostDeleteSchema,
+    foodCostInfoSchema,
+    
+    // Батьківська плата
     billingFilterSchema,
-    billingInfoSchema,
     billingCreateSchema,
     billingUpdateSchema,
     billingDeleteSchema,
-
-    // ✅ Схеми для мобільного додатку (ВИПРАВЛЕНО)
-    mobileAttendanceGetSchema,
-    mobileAttendanceSaveSchema,
-
-    // Схема для перевірки вихователя
-    verifyEducatorSchema,
-
-    // Схеми для адміністраторів
-    adminsInfoSchema,
+    billingInfoSchema,
+    
+    // Адміністратори
     adminsFilterSchema,
     adminsCreateSchema,
     adminsUpdateSchema,
     adminsDeleteSchema,
+    adminsInfoSchema,
+    verifyEducatorSchema,
 };
